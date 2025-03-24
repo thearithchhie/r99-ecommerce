@@ -1,37 +1,28 @@
 <script setup lang="ts">
-import { inject } from 'vue'
 import { cn } from '@/lib/utils'
+import { DropdownMenuItem, type DropdownMenuItemProps, useForwardProps } from 'reka-ui'
+import { computed, type HTMLAttributes } from 'vue'
 
-defineProps({
-  disabled: {
-    type: Boolean,
-    default: false
-  },
-  className: {
-    type: String,
-    default: ''
-  }
+const props = defineProps<DropdownMenuItemProps & { class?: HTMLAttributes['class'], inset?: boolean }>()
+
+const delegatedProps = computed(() => {
+  const { class: _, ...delegated } = props
+
+  return delegated
 })
 
-const open = inject('dropdown-open', null)
-
-const closeDropdown = () => {
-  if (open) {
-    open.value = false
-  }
-}
+const forwardedProps = useForwardProps(delegatedProps)
 </script>
 
 <template>
-  <button
+  <DropdownMenuItem
+    v-bind="forwardedProps"
     :class="cn(
-      'flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 cursor-pointer',
-      disabled && 'pointer-events-none opacity-50',
-      className
+      'relative flex cursor-default select-none items-center rounded-sm gap-2 px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0',
+      inset && 'pl-8',
+      props.class,
     )"
-    :disabled="disabled"
-    @click="closeDropdown"
   >
     <slot />
-  </button>
-</template> 
+  </DropdownMenuItem>
+</template>

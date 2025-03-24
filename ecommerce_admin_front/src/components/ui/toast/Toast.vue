@@ -1,88 +1,36 @@
 <script setup lang="ts">
-import { X } from 'lucide-vue-next'
-import { computed } from 'vue'
+import { cn } from '@/lib/utils'
+import type { HTMLAttributes } from 'vue'
 
-const props = defineProps<{
-  id: string
-  title?: string
-  description?: string
-  action?: {
-    label: string
-    onClick: () => void
-  }
-  variant?: 'default' | 'destructive' | 'success'
-}>()
+interface Props {
+  class?: HTMLAttributes['class']
+  variant?: 'default' | 'destructive'
+  open?: boolean
+}
 
-const emit = defineEmits(['dismiss'])
-
-const variantClasses = computed(() => {
-  switch (props.variant) {
-    case 'destructive':
-      return 'bg-red-50 border-red-200 text-red-900'
-    case 'success':
-      return 'bg-green-50 border-green-200 text-green-900'
-    default:
-      return 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
-  }
+const props = withDefaults(defineProps<Props>(), {
+  variant: 'default'
 })
 
-const handleDismiss = () => {
-  emit('dismiss')
-}
+const emit = defineEmits<{
+  (e: 'update:open', value: boolean): void
+}>()
 </script>
 
 <template>
   <div
-    class="w-full max-w-sm overflow-hidden rounded-lg shadow-lg pointer-events-auto border transform transition-all duration-500 ease-in-out animate-enter"
-    :class="variantClasses"
+    v-if="props.open"
+    :class="cn(
+      'group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md border p-6 pr-8 shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full',
+      {
+        'border bg-background text-foreground': props.variant === 'default',
+        'destructive group border-destructive bg-destructive text-destructive-foreground':
+          props.variant === 'destructive'
+      },
+      props.class
+    )"
+    @click="emit('update:open', false)"
   >
-    <div class="p-4">
-      <div class="flex items-start">
-        <div class="flex-1">
-          <h3 class="text-sm font-medium" v-if="title">{{ title }}</h3>
-          <p
-            class="mt-1 text-sm"
-            :class="title ? 'text-gray-500 dark:text-gray-400' : ''"
-            v-if="description"
-          >
-            {{ description }}
-          </p>
-        </div>
-        <div class="ml-4 flex flex-shrink-0">
-          <button
-            @click="handleDismiss"
-            class="inline-flex text-gray-400 focus:outline-none focus:text-gray-500 hover:text-gray-500"
-          >
-            <span class="sr-only">Close</span>
-            <X class="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-      <div class="mt-3 flex gap-3 text-sm" v-if="action">
-        <button
-          @click="action.onClick"
-          class="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400 dark:hover:text-blue-300"
-        >
-          {{ action.label }}
-        </button>
-      </div>
-    </div>
+    <slot />
   </div>
 </template>
-
-<style scoped>
-.animate-enter {
-  animation: slideIn 0.2s ease;
-}
-
-@keyframes slideIn {
-  from {
-    transform: translateY(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-</style> 

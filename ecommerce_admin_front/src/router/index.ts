@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import DashboardLayout from '@/layouts/DashboardLayout.vue'
 import LoginLayout from '@/layouts/LoginLayout.vue'
+import LogoutView from '@/views/LogoutView.vue'
 
 // Function to get a cookie value by name
 const getCookie = (name: string): string | null => {
@@ -80,7 +81,10 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/logout',
     name: 'logout',
-    component: () => import('@/views/LogoutView.vue')
+    component: LogoutView,
+    meta: {
+      requiresAuth: true
+    }
   }
 ]
 

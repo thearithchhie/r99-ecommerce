@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 const stats = ref([
   {
@@ -59,6 +60,17 @@ const getStatusVariant = (status: string) => {
     case 'cancelled': return 'destructive'
     default: return 'secondary'
   }
+}
+
+const showLogoutDialog = ref(false)
+const showDeleteDialog = ref(false)
+
+const handleLogout = () => {
+  // Handle logout logic
+}
+
+const handleDelete = () => {
+  // Handle delete logic
 }
 </script>
 
@@ -129,5 +141,23 @@ const getStatusVariant = (status: string) => {
         </Table>
       </CardContent>
     </Card>
+
+    <ConfirmDialog
+      :is-open="showLogoutDialog"
+      title="Confirm Logout"
+      description="Are you sure you want to logout? You'll need to login again to access your account."
+      confirm-text="Yes, Logout"
+      @confirm="handleLogout"
+      @cancel="showLogoutDialog = false"
+    />
+
+    <ConfirmDialog
+      :is-open="showDeleteDialog"
+      title="Confirm Deletion"
+      description="Are you sure you want to delete this user? This action cannot be undone."
+      confirm-text="Yes, Delete"
+      @confirm="handleDelete"
+      @cancel="showDeleteDialog = false"
+    />
   </div>
 </template> 
