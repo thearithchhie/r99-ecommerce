@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import router from '@/router'
+import axios from '@/lib/axios'
 
 export interface User {
   name: string;
@@ -9,54 +10,48 @@ export interface User {
 }
 
 export const useAuthStore = defineStore('auth', () => {
-  // Default user data
-  const defaultUser: User = {
-    name: 'Admin User',
-    email: 'admin@example.com',
-    role: 'Administrator'
-  }
-
   const user = ref<User | null>(null)
   const isAuthenticated = ref(false)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
 
-  // Computed properties for user data with default values
-  const userName = computed(() => user.value?.name || defaultUser.name)
-  const userEmail = computed(() => user.value?.email || defaultUser.email)
-  const userRole = computed(() => user.value?.role || defaultUser.role)
+  // Cookie helpers
+  const setCookie = (name: string, value: string, days = 7) => {
+    const date = new Date()
+    date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000))
+    const expires = `expires=${date.toUTCString()}`
+    document.cookie = `${name}=${value};${expires};path=/;SameSite=Strict`
+  }
+
+  const getCookie = (name: string) => {
+    const cookieValue = document.cookie
+      .split('; ')
+      .find(row => row.startsWith(`${name}=`))
+    return cookieValue ? cookieValue.split('=')[1] : null
+  }
+
+  const deleteCookie = (name: string) => {
+    document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/;`
+  }
 
   // Initialize auth state
-  const initAuth = () => {
+  const initAuth = async () => {
     try {
-      const savedUser = localStorage.getItem('user')
-      const savedAuth = localStorage.getItem('isAuthenticated')
-      
-      if (savedUser && savedAuth === 'true') {
-        const parsedUser = JSON.parse(savedUser)
-        // Ensure all required fields are present
-        user.value = {
-          name: parsedUser.name || defaultUser.name,
-          email: parsedUser.email || defaultUser.email,
-          role: parsedUser.role || defaultUser.role
-        }
-        isAuthenticated.value = true
-      } else {
-        // Use default user data
-        user.value = { ...defaultUser }
-        isAuthenticated.value = true
-        // Save initial state
-        localStorage.setItem('user', JSON.stringify(user.value))
-        localStorage.setItem('isAuthenticated', 'true')
-      }
-      console.log('Auth initialized with user:', user.value)
-    } catch (error) {
-      console.error('Error initializing auth:', error)
-      // Fallback to default user
-      user.value = { ...defaultUser }
+      const response = await axios.get('/user')
+      user.value = response.data
       isAuthenticated.value = true
-      localStorage.setItem('user', JSON.stringify(user.value))
-      localStorage.setItem('isAuthenticated', 'true')
+    } catch (error) {
+      console.log('Not authenticated or error fetching user data')
+      user.value = null
+      isAuthenticated.value = false
+      
+      // Check if we're on a protected route and redirect to login if needed
+      const currentRoute = router.currentRoute.value
+      if (currentRoute.meta.requiresAuth || 
+          currentRoute.path.startsWith('/dashboard') || 
+          currentRoute.path === '/') {
+        router.push('/auth/login')
+      }
     }
   }
 
@@ -66,26 +61,28 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
     
     try {
-      console.log('Logging in with email:', email)
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      // Call the API login endpoint
+      const response = await axios.post('/auth/login', {
+        email,
+        password
+      })
       
-      const newUser = {
-        ...defaultUser,
-        email: email
+      // Handle API response
+      const { user: userData, token } = response.data
+      
+      // Save token to cookie
+      if (token) {
+        setCookie('token', token)
       }
       
-      user.value = newUser
+      user.value = userData
       isAuthenticated.value = true
       
-      // Save to localStorage
-      localStorage.setItem('user', JSON.stringify(newUser))
-      localStorage.setItem('isAuthenticated', 'true')
-      
-      console.log('Login successful, user data:', user.value)
+      console.log('Login successful')
       router.push('/dashboard')
     } catch (err: any) {
-      error.value = 'Failed to log in'
-      console.error('Login failed:', err)
+      console.error('Login error:', err)
+      error.value = err.response?.data?.message || 'Failed to log in'
       throw err
     } finally {
       isLoading.value = false
@@ -96,11 +93,27 @@ export const useAuthStore = defineStore('auth', () => {
   const logout = async () => {
     isLoading.value = true
     try {
-      console.log('Logging out...')
-      await new Promise(resolve => setTimeout(resolve, 500))
+      // Get token from cookie
+      const token = getCookie('token')
+      
+      // Try to call the backend logout endpoint with token
+      try {
+        await axios.post('/auth/logout', {}, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+      } catch (e) {
+        console.error('Backend logout failed, but proceeding with client logout', e)
+      }
+      
+      // Always clear local state regardless of API success
       clearAuthData()
-      localStorage.removeItem('user')
-      localStorage.removeItem('isAuthenticated')
+      router.push('/auth/login')
+    } catch (error) {
+      console.error('Logout processing error:', error)
+      // Still clear auth data and redirect
+      clearAuthData()
       router.push('/auth/login')
     } finally {
       isLoading.value = false
@@ -109,25 +122,13 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Clear auth data
   const clearAuthData = () => {
-    console.log('Clearing auth data')
     user.value = null
     isAuthenticated.value = false
-  }
-
-  // Update user info with validation
-  const updateUserInfo = (userData: Partial<User>) => {
-    if (!user.value) return
     
-    console.log('Updating user info:', userData)
-    
-    user.value = {
-      ...user.value,
-      ...userData
-    }
-
-    // Save updated user to localStorage
-    localStorage.setItem('user', JSON.stringify(user.value))
-    console.log('User info updated:', user.value)
+    // Clear auth cookies
+    deleteCookie('token')
+    deleteCookie('XSRF-TOKEN')
+    deleteCookie('laravel_session')
   }
 
   return {
@@ -135,13 +136,9 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     isLoading,
     error,
-    userName,
-    userEmail,
-    userRole,
     initAuth,
     login,
     logout,
-    clearAuthData,
-    updateUserInfo
+    clearAuthData
   }
 }) 

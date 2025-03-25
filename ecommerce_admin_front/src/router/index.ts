@@ -95,19 +95,20 @@ const router = createRouter({
 
 // Navigation Guards
 router.beforeEach((to, from, next) => {
-  const isAuthenticated = getCookie('isAuthenticated') === 'true'
+  // Check for auth token (better than isAuthenticated cookie)
+  const hasAuthToken = getCookie('token') !== null
   
   // Check if the route requires authentication
   if (to.matched.some(record => record.meta.requiresAuth)) {
     // If not authenticated, redirect to login
-    if (!isAuthenticated) {
+    if (!hasAuthToken) {
       next({ name: 'login' })
     } else {
       next() // Allow access
     }
   } else {
     // For login route, redirect to dashboard if already authenticated
-    if (to.name === 'login' && isAuthenticated) {
+    if (to.name === 'login' && hasAuthToken) {
       next({ name: 'dashboard' })
     } else {
       next() // Allow access to non-auth routes
@@ -115,4 +116,4 @@ router.beforeEach((to, from, next) => {
   }
 })
 
-export default router 
+export default router;

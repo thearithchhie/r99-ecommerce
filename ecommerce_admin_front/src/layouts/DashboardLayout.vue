@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { Menu, ChevronDown, User, Settings, LogOut, LayoutDashboard, Package, ShoppingCart, Users, X } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import {
@@ -37,26 +37,22 @@ watch(() => router.currentRoute.value.path, () => {
   isDropdownOpen.value = false
 })
 
-// Debug logging
-console.log('Auth Store State:', {
-  isAuthenticated: authStore.isAuthenticated,
-  user: authStore.user,
-  userName: authStore.userName,
-  userEmail: authStore.userEmail,
-  userRole: authStore.userRole
-})
-
 // Use auth store for user data
 const userData = computed(() => {
-  console.log('Computing userData:', {
-    name: authStore.userName,
-    email: authStore.userEmail,
-    role: authStore.userRole
-  })
+  const defaultData = {
+    name: 'Guest User',
+    email: 'guest@example.com',
+    role: 'Guest'
+  }
+  
+  if (!authStore.user) {
+    return defaultData
+  }
+  
   return {
-    name: authStore.userName || 'Guest',
-    email: authStore.userEmail || 'No email',
-    role: authStore.userRole || 'No role'
+    name: authStore.user.name || defaultData.name,
+    email: authStore.user.email || defaultData.email,
+    role: authStore.user.role || defaultData.role
   }
 })
 
@@ -74,9 +70,8 @@ const toggleSidebar = () => {
 
 const handleLogout = async () => {
   try {
-    await authStore.logout()
     showLogoutDialog.value = false
-    router.push('/login')
+    await authStore.logout()
     toast.toast({
       title: 'Logged out successfully',
       description: 'You have been logged out of your account.',
@@ -84,11 +79,36 @@ const handleLogout = async () => {
   } catch (error) {
     toast.toast({
       title: 'Error',
-      description: 'Failed to logout. Please try again.',
+      description: 'Failed to complete logout process. You have been logged out locally.',
       variant: 'destructive',
     })
   }
 }
+
+// Get cookie helper
+const getCookie = (name: string) => {
+  const cookieValue = document.cookie
+    .split('; ')
+    .find(row => row.startsWith(`${name}=`))
+  return cookieValue ? cookieValue.split('=')[1] : null
+}
+
+// Check authentication when component mounts
+onMounted(async () => {
+  try {
+    // Try to initialize auth state
+    await authStore.initAuth()
+    
+    // If still not authenticated after init, redirect
+    if (!authStore.isAuthenticated && !getCookie('token')) {
+      console.log('Not authenticated, redirecting to login')
+      router.push('/auth/login')
+    }
+  } catch (error) {
+    console.error('Auth check failed:', error)
+    router.push('/auth/login')
+  }
+})
 </script>
 
 <template>
@@ -169,16 +189,16 @@ const handleLogout = async () => {
             <DropdownMenuTrigger>
               <Button variant="ghost" class="relative h-8 w-8 rounded-full">
                 <Avatar>
-                  <AvatarImage :src="`https://api.dicebear.com/7.x/avataaars/svg?seed=${userData.email}`" />
-                  <AvatarFallback>{{ userData.name.charAt(0) }}</AvatarFallback>
+                  <AvatarImage :src="`https://api.dicebear.com/7.x/avataaars/svg?seed=${userData?.email || 'default'}`" />
+                  <AvatarFallback>{{ userData?.name?.charAt(0) || 'U' }}</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent class="w-56">
               <DropdownMenuLabel class="font-normal">
                 <div class="flex flex-col space-y-1">
-                  <p class="text-sm font-medium leading-none">{{ userData.name }}</p>
-                  <p class="text-xs leading-none text-muted-foreground">{{ userData.email }}</p>
+                  <p class="text-sm font-medium leading-none">{{ userData?.name || 'User' }}</p>
+                  <p class="text-xs leading-none text-muted-foreground">{{ userData?.email || 'No email' }}</p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
