@@ -1,54 +1,152 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { Search, ChevronLeft, ChevronRight, RefreshCw, UserPlus, ArrowUp, ArrowDown, Pencil, Trash2, Eye } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'vue-router';
+import axios from '@/lib/axios';
+import { useToast } from '@/components/ui/toast';
+import { Pagination, PaginationList, PaginationFirst, PaginationPrev, PaginationNext, PaginationLast, PaginationListItem, PaginationEllipsis } from '@/components/ui/pagination';
+
+
+// Define user type
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  role?: string;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: any; // Allow for additional properties
+}
+
+interface Pagination {
+  total: number;
+  per_page: number;
+  current_page: number;
+  last_page: number;
+}
 
 const router = useRouter();
+const toast = useToast();
 
-// Dummy user data
-const users = ref([
-  { id: 1, name: 'John Doe', email: 'john@example.com', role: 'Admin', status: 'Active', lastLogin: '2023-03-20 14:30' },
-  { id: 2, name: 'Jane Smith', email: 'jane@example.com', role: 'Customer', status: 'Active', lastLogin: '2023-03-19 09:15' },
-  { id: 3, name: 'Robert Johnson', email: 'robert@example.com', role: 'Customer', status: 'Inactive', lastLogin: '2023-03-15 11:45' },
-  { id: 4, name: 'Emily Davis', email: 'emily@example.com', role: 'Manager', status: 'Active', lastLogin: '2023-03-18 16:20' },
-  { id: 5, name: 'Michael Wilson', email: 'michael@example.com', role: 'Customer', status: 'Active', lastLogin: '2023-03-17 13:10' },
-  { id: 6, name: 'Sarah Thompson', email: 'sarah@example.com', role: 'Customer', status: 'Active', lastLogin: '2023-03-16 10:30' },
-  { id: 7, name: 'David Anderson', email: 'david@example.com', role: 'Customer', status: 'Inactive', lastLogin: '2023-03-10 09:45' },
-  { id: 8, name: 'Jennifer Lee', email: 'jennifer@example.com', role: 'Customer', status: 'Active', lastLogin: '2023-03-14 15:20' },
-  { id: 9, name: 'William Martinez', email: 'william@example.com', role: 'Manager', status: 'Active', lastLogin: '2023-03-13 11:35' },
-  { id: 10, name: 'Jessica Taylor', email: 'jessica@example.com', role: 'Customer', status: 'Active', lastLogin: '2023-03-12 14:50' },
-  { id: 11, name: 'Daniel Brown', email: 'daniel@example.com', role: 'Customer', status: 'Inactive', lastLogin: '2023-03-08 09:15' },
-  { id: 12, name: 'Amanda White', email: 'amanda@example.com', role: 'Customer', status: 'Active', lastLogin: '2023-03-11 16:30' },
-  { id: 13, name: 'Matthew Miller', email: 'matthew@example.com', role: 'Manager', status: 'Active', lastLogin: '2023-03-09 13:45' },
-  { id: 14, name: 'Olivia Harris', email: 'olivia@example.com', role: 'Customer', status: 'Active', lastLogin: '2023-03-07 10:20' },
-  { id: 15, name: 'Andrew Clark', email: 'andrew@example.com', role: 'Customer', status: 'Inactive', lastLogin: '2023-03-05 15:10' },
-  { id: 16, name: 'Sophia Lewis', email: 'sophia@example.com', role: 'Customer', status: 'Active', lastLogin: '2023-03-06 11:30' },
-  { id: 17, name: 'Joseph Young', email: 'joseph@example.com', role: 'Customer', status: 'Active', lastLogin: '2023-03-04 09:45' },
-  { id: 18, name: 'Emma Walker', email: 'emma@example.com', role: 'Manager', status: 'Active', lastLogin: '2023-03-03 14:20' },
-  { id: 19, name: 'Alexander Hall', email: 'alexander@example.com', role: 'Customer', status: 'Inactive', lastLogin: '2023-03-02 10:35' },
-  { id: 20, name: 'Ava Allen', email: 'ava@example.com', role: 'Customer', status: 'Active', lastLogin: '2023-03-01 15:50' },
-]);
+// User data state
+const users = ref<User[]>([]);
+const isLoading = ref(false);
+const loadError = ref<string | null>(null);
+
+// Pagination state from API
+const pagination = ref<Pagination>({
+  total: 0,
+  per_page: 10,
+  current_page: 1,
+  last_page: 1
+});
 
 // Delete confirmation
 const showDeleteConfirm = ref(false);
 const userToDelete = ref<number | null>(null);
 
+// Fetch users from the API
+const fetchUsers = async (page = 1, perPage = 10, query = '') => {
+  isLoading.value = true;
+  loadError.value = null;
+  
+  try {
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('per_page', perPage.toString());
+    
+    if (query) {
+      params.append('search', query);
+    }
+    
+    const response = await axios.get(`/users?${params.toString()}`);
+    
+    if (response.data.success) {
+      // Extract users and pagination data from the API response format
+      if (response.data.data && Array.isArray(response.data.data.users)) {
+        // Ensure each user has at least empty strings for required properties
+        
+        //FIXME: When we implement the backend, we need to remove this
+        users.value = response.data.data.users.map((user: any) => ({
+          id: user.id,
+          name: user.name || '',
+          email: user.email || '',
+          role: user.role || 'User',
+          created_at: user.created_at || '',
+          updated_at: user.updated_at || '',
+          ...user
+        }));
+      } else {
+        console.warn('Unexpected API response format:', response.data);
+        users.value = [];
+      }
+      
+      // Extract pagination data if available
+      if (response.data.meta && response.data.meta.pagination) {
+        pagination.value = response.data.meta.pagination;
+      }
+    } else {
+      throw new Error(response.data.message || 'Failed to fetch users');
+    }
+  } catch (error: any) {
+    loadError.value = error.response?.data?.message || error.message || 'Failed to fetch users';
+    toast.toast({
+      title: 'Error',
+      description: loadError.value,
+      variant: 'destructive'
+    });
+    console.error('Error fetching users:', error);
+  } finally {
+    // Always set loading to false when done
+    isLoading.value = false;
+  }
+};
+
+// Refresh data
+const refreshData = () => {
+  fetchUsers(pagination.value.current_page, pagination.value.per_page, searchQuery.value);
+};
+
+// Confirm delete user
 const confirmDelete = (userId: number) => {
   userToDelete.value = userId;
   showDeleteConfirm.value = true;
 };
 
-const handleDelete = () => {
+// Delete user
+const handleDelete = async () => {
   if (userToDelete.value !== null) {
-    // Remove user from array
-    users.value = users.value.filter(user => user.id !== userToDelete.value);
-    // Reset
-    userToDelete.value = null;
-    showDeleteConfirm.value = false;
+    try {
+      const response = await axios.delete(`/users/${userToDelete.value}`);
+      
+      if (response.data.success) {
+        toast.toast({
+          title: 'Success',
+          description: 'User deleted successfully'
+        });
+        
+        // Refresh the user list
+        refreshData();
+      } else {
+        throw new Error(response.data.message || 'Failed to delete user');
+      }
+    } catch (error: any) {
+      toast.toast({
+        title: 'Error',
+        description: error.response?.data?.message || error.message || 'Failed to delete user',
+        variant: 'destructive'
+      });
+      console.error('Error deleting user:', error);
+    } finally {
+      // Reset delete confirmation
+      userToDelete.value = null;
+      showDeleteConfirm.value = false;
+    }
   }
 };
 
+// Cancel delete
 const cancelDelete = () => {
   userToDelete.value = null;
   showDeleteConfirm.value = false;
@@ -56,8 +154,8 @@ const cancelDelete = () => {
 
 // Edit user
 const handleEdit = (userId: number) => {
-  // In a real application, this would navigate to an edit form or open a modal
-  alert(`Edit user with ID: ${userId}`);
+  // Redirect to user edit page
+  router.push(`/users/${userId}/edit`);
 };
 
 // View user details
@@ -66,41 +164,33 @@ const handleViewDetails = (userId: number) => {
   router.push(`/users/${userId}`);
 };
 
-// Pagination
-const currentPage = ref(1);
-const itemsPerPage = ref(8);
-const totalPages = computed(() => Math.ceil(filteredUsers.value.length / itemsPerPage.value));
+// Add new user
+const handleAddUser = () => {
+  router.push('/users/create');
+};
 
 // Search
 const searchQuery = ref('');
-const filteredUsers = computed(() => {
-  if (!searchQuery.value) {
-    return sortedUsers.value;
-  }
-  const query = searchQuery.value.toLowerCase();
-  return sortedUsers.value.filter(user => 
-    user.name.toLowerCase().includes(query) || 
-    user.email.toLowerCase().includes(query) ||
-    user.role.toLowerCase().includes(query)
-  );
-});
+const handleSearch = () => {
+  // Reset to first page when searching
+  fetchUsers(1, pagination.value.per_page, searchQuery.value);
+};
 
 // Sorting
 const sortColumn = ref('name');
 const sortDirection = ref('asc');
 
-const toggleSort = (column) => {
+const toggleSort = (column: string) => {
   if (sortColumn.value === column) {
     sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
   } else {
     sortColumn.value = column;
     sortDirection.value = 'asc';
   }
-};
-
-const sortedUsers = computed(() => {
-  const sorted = [...users.value];
-  return sorted.sort((a, b) => {
+  
+  // In a real application, you would send these sorting parameters to the backend
+  // For now, we'll just do client-side sorting
+  users.value.sort((a, b) => {
     const aValue = a[sortColumn.value];
     const bValue = b[sortColumn.value];
     
@@ -114,55 +204,51 @@ const sortedUsers = computed(() => {
       return 0;
     }
   });
-});
+};
 
-// Paginated users
-const paginatedUsers = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage.value;
-  const end = start + itemsPerPage.value;
-  return filteredUsers.value.slice(start, end);
-});
-
-// Navigation
-const goToPage = (page) => {
-  if (page >= 1 && page <= totalPages.value) {
-    currentPage.value = page;
+// Pagination navigation
+const goToPage = (page: number) => {
+  if (page >= 1 && page <= pagination.value.last_page) {
+    fetchUsers(page, pagination.value.per_page, searchQuery.value);
   }
 };
 
-const nextPage = () => {
-  if (currentPage.value < totalPages.value) {
-    currentPage.value++;
-  }
-};
-
-const prevPage = () => {
-  if (currentPage.value > 1) {
-    currentPage.value--;
-  }
-};
-
-// Get status class
-const getStatusClass = (status) => {
-  return status === 'Active' 
+// Helper functions
+const getStatusClass = (status: string) => {
+  return status === 'active' 
     ? 'bg-green-100 text-green-800' 
     : 'bg-gray-100 text-gray-800';
 };
 
-// Get sort icon
-const getSortIcon = (column) => {
+const getSortIcon = (column: string) => {
   if (sortColumn.value !== column) {
     return null;
   }
   return sortDirection.value === 'asc' ? ArrowUp : ArrowDown;
 };
+
+const paginationConfig = computed(() => ({
+  itemsPerPage: pagination.value.per_page,
+  total: pagination.value.total,
+  currentPage: pagination.value.current_page
+}));
+
+// Handle page change from shadcn pagination component
+const handlePageChange = (newPage: number) => {
+  goToPage(newPage);
+};
+
+// Initial data loading
+onMounted(() => {
+  fetchUsers(1, 10);
+});
 </script>
 
 <template>
   <div>
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-2xl font-bold">Users</h1>
-      <Button class="flex items-center gap-2">
+      <Button class="flex items-center gap-2" @click="handleAddUser">
         <UserPlus class="h-4 w-4" />
         Add User
       </Button>
@@ -180,16 +266,47 @@ const getSortIcon = (column) => {
               type="search"
               class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary text-sm"
               placeholder="Search users..."
+              @keyup.enter="handleSearch"
             />
           </div>
-          <Button variant="outline" class="flex items-center gap-2">
-            <RefreshCw class="h-4 w-4" />
-            Refresh
+          <Button variant="outline" class="flex items-center gap-2" @click="refreshData" :disabled="isLoading">
+            <RefreshCw class="h-4 w-4" :class="{ 'animate-spin': isLoading }" />
+            {{ isLoading ? 'Loading...' : 'Refresh' }}
           </Button>
         </div>
       </div>
 
-      <div class="overflow-x-auto">
+      <!-- Loading state -->
+      <div v-if="isLoading && users.length === 0" class="flex justify-center items-center p-12">
+        <div class="flex flex-col items-center">
+          <RefreshCw class="h-8 w-8 text-primary animate-spin mb-4" />
+          <p class="text-gray-500">Loading users...</p>
+        </div>
+      </div>
+
+      <!-- Error state -->
+      <div v-else-if="loadError && users.length === 0" class="flex justify-center items-center p-12">
+        <div class="text-center">
+          <p class="text-red-500 mb-4">{{ loadError }}</p>
+          <Button @click="refreshData">Try Again</Button>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div v-else-if="!isLoading && users.length === 0" class="flex justify-center items-center p-12">
+        <div class="text-center">
+          <p class="text-gray-500 mb-4">No users found</p>
+          <Button @click="handleAddUser">Add Your First User</Button>
+        </div>
+      </div>
+
+      <!-- User table with loading overlay -->
+      <div v-else class="overflow-x-auto relative">
+        <!-- Transparent loading overlay when refreshing data -->
+        <div v-if="isLoading && users.length > 0" class="absolute inset-0 bg-white bg-opacity-60 z-10 flex items-center justify-center">
+          <RefreshCw class="h-8 w-8 text-primary animate-spin" />
+        </div>
+        
         <table class="min-w-full divide-y divide-gray-200">
           <thead class="bg-gray-50">
             <tr>
@@ -223,56 +340,28 @@ const getSortIcon = (column) => {
                   <component :is="getSortIcon('role')" v-if="getSortIcon('role')" class="h-3 w-3" />
                 </div>
               </th>
-              <th 
-                scope="col" 
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                @click="toggleSort('status')"
-              >
-                <div class="flex items-center gap-1">
-                  Status
-                  <component :is="getSortIcon('status')" v-if="getSortIcon('status')" class="h-3 w-3" />
-                </div>
-              </th>
-              <th 
-                scope="col" 
-                class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                @click="toggleSort('lastLogin')"
-              >
-                <div class="flex items-center gap-1">
-                  Last Login
-                  <component :is="getSortIcon('lastLogin')" v-if="getSortIcon('lastLogin')" class="h-3 w-3" />
-                </div>
-              </th>
               <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-for="user in paginatedUsers" :key="user.id">
+            <tr v-for="user in users" :key="user.id">
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">
                   <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-semibold mr-3">
-                    {{ user.name.charAt(0) }}
+                    {{ user && user.name ? user.name.charAt(0) : '?' }}
                   </div>
                   <div class="text-sm font-medium text-gray-900">
-                    {{ user.name }}
+                    {{ user && user.name ? user.name : 'Unnamed User' }}
                   </div>
                 </div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ user.email }}
+                {{ user && user.email ? user.email : 'No email' }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ user.role }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap">
-                <span :class="['px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full', getStatusClass(user.status)]">
-                  {{ user.status }}
-                </span>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {{ user.lastLogin }}
+                {{ user && user.role ? user.role : 'User' }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 <div class="flex space-x-2">
@@ -322,49 +411,90 @@ const getSortIcon = (column) => {
       </div>
 
       <!-- Pagination -->
-      <div class="px-6 py-4 flex items-center justify-between border-t">
+      <div v-if="users.length > 0" class="px-6 py-4 flex items-center justify-between border-t">
         <div class="text-sm text-gray-500">
-          Showing {{ (currentPage - 1) * itemsPerPage + 1 }} to 
-          {{ Math.min(currentPage * itemsPerPage, filteredUsers.length) }} of 
-          {{ filteredUsers.length }} users
+          Showing {{ (pagination.current_page - 1) * pagination.per_page + 1 }} to 
+          {{ Math.min(pagination.current_page * pagination.per_page, pagination.total) }} of 
+          {{ pagination.total }} users
         </div>
         
         <div class="flex-1 flex justify-end">
-          <nav class="flex items-center space-x-2">
-            <Button 
-              variant="outline" 
-              size="sm"
-              :disabled="currentPage === 1"
-              @click="prevPage"
-              class="h-8 w-8 p-0 flex items-center justify-center"
-            >
-              <span class="sr-only">Previous</span>
-              <ChevronLeft class="h-4 w-4" />
-            </Button>
-            
-            <div v-for="page in totalPages" :key="page" class="flex items-center">
-              <Button 
-                variant="outline"
-                size="sm"
-                :class="page === currentPage ? 'bg-primary text-primary-foreground' : ''"
-                @click="goToPage(page)"
-                class="h-8 w-8 p-0 flex items-center justify-center"
-              >
-                {{ page }}
-              </Button>
-            </div>
-            
-            <Button 
-              variant="outline"
-              size="sm" 
-              :disabled="currentPage === totalPages"
-              @click="nextPage"
-              class="h-8 w-8 p-0 flex items-center justify-center"
-            >
-              <span class="sr-only">Next</span>
-              <ChevronRight class="h-4 w-4" />
-            </Button>
-          </nav>
+          <Pagination 
+            v-slot="{ page }" 
+            :items-per-page="paginationConfig.itemsPerPage" 
+            :total="paginationConfig.total" 
+            :sibling-count="1"
+            show-edges 
+            :default-page="paginationConfig.currentPage"
+            @update:page="handlePageChange"
+          >
+            <PaginationList v-slot="{ items }" class="flex items-center space-x-2">
+              <PaginationFirst class="h-9 w-9 p-0" as-child>
+                <Button
+                  variant="ghost" 
+                  size="sm"
+                  class="h-8 w-8 p-0 flex items-center justify-center"
+                  :disabled="isLoading"
+                >
+                  <ChevronLeft class="h-4 w-4 mr-1" />
+                  <ChevronLeft class="h-4 w-4 -ml-3" />
+                  <span class="sr-only">First Page</span>
+                </Button>
+              </PaginationFirst>
+              
+              <PaginationPrev class="h-9 w-9 p-0" as-child>
+                <Button
+                  variant="ghost" 
+                  size="sm"
+                  class="h-8 w-8 p-0 flex items-center justify-center"
+                  :disabled="isLoading"
+                >
+                  <ChevronLeft class="h-4 w-4" />
+                  <span class="sr-only">Previous Page</span>
+                </Button>
+              </PaginationPrev>
+
+              <template v-for="(item, index) in items">
+                <PaginationListItem v-if="item.type === 'page'" :key="index" :value="item.value" as-child>
+                  <Button 
+                    variant="ghost"
+                    size="sm"
+                    :class="item.value === page ? 'bg-primary text-primary-foreground' : ''"
+                    :disabled="isLoading"
+                    class="h-9 w-9 p-0 flex items-center justify-center"
+                  >
+                    {{ item.value }}
+                  </Button>
+                </PaginationListItem>
+                <PaginationEllipsis v-else :key="item.type" :index="index" class="px-2" />
+              </template>
+
+              <PaginationNext class="h-9 w-9 p-0" as-child>
+                <Button
+                  variant="ghost" 
+                  size="sm"
+                  class="h-8 w-8 p-0 flex items-center justify-center"
+                  :disabled="isLoading"
+                >
+                  <ChevronRight class="h-4 w-4" />
+                  <span class="sr-only">Next Page</span>
+                </Button>
+              </PaginationNext>
+              
+              <PaginationLast class="h-9 w-9 p-0" as-child>
+                <Button
+                  variant="ghost" 
+                  size="sm"
+                  class="h-8 w-8 p-0 flex items-center justify-center"
+                  :disabled="isLoading"
+                >
+                  <ChevronRight class="h-4 w-4 mr-1" />
+                  <ChevronRight class="h-4 w-4 -ml-3" />
+                  <span class="sr-only">Last Page</span>
+                </Button>
+              </PaginationLast>
+            </PaginationList>
+          </Pagination>
         </div>
       </div>
     </div>
@@ -394,4 +524,6 @@ const getSortIcon = (column) => {
       </div>
     </div>
   </div>
-</template> 
+  
+  
+</template>

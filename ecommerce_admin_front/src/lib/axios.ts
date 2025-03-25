@@ -6,6 +6,7 @@ const instance = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
+    'Accept-Language': 'en'
   },
   withCredentials: true // Important for handling cookies/session
 })

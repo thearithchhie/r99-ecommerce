@@ -1,0 +1,27 @@
+{
+    "OK_200": "OK",
+    "SMS_LOGIN_SUCCESS": "Login successful",
+    "SMS_LOGIN_SUCCESS_NO_TOKEN": "Login successful (token creation unavailable)",
+    "SMS_LOGOUT_SUCCESS": "Logged out successfully",
+    "SMS_CREATED_201": "Created successfully",
+    "SMS_ACCEPTED_202": "Accepted",
+    "SMS_NO_CONTENT_204": "No content",
+    
+    "SMS_BAD_REQUEST_400": "Bad request",
+    "SMS_UNAUTHORIZED_401": "Unauthorized",
+    "SMS_FORBIDDEN_403": "Forbidden",
+    "SMS_NOT_FOUND_404": "Not found",
+    "SMS_VALIDATION_ERROR_422": "Validation error",
+    "SMS_LOGIN_INVALID_CREDENTIALS": "The provided credentials are incorrect.",
+    "SMS_SERVER_ERROR_500": "Server error",
+
+    "SMS_CREATED_USER_SUCCESSFULLY": "User created successfully",
+    "SMS_CREATED_USER_UNSUCCESSFULLY": "Failed to create user",
+    "SMS_GET_USER_SUCCESSFULLY": "User retrieved successfully",
+    "SMS_GET_USER_UNSUCCESSFULLY": "Failed to retrieve user",
+    "SMS_GET_USER_NOT_FOUND": "User not found",
+    "SMS_UPDATE_USER_SUCCESSFULLY": "User updated successfully",
+    "SMS_UPDATE_USER_UNSUCCESSFULLY": "Failed to update user",
+    "SMS_DELETE_USER_SUCCESSFULLY": "User deleted successfully",
+    "SMS_DELETE_USER_UNSUCCESSFULLY": "Failed to delete user"
+} 

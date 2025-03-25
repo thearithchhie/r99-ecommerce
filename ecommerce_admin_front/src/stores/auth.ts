@@ -37,7 +37,17 @@ export const useAuthStore = defineStore('auth', () => {
   // Initialize auth state
   const initAuth = async () => {
     try {
-      const response = await axios.get('/user')
+      const token = getCookie('token')
+      if (!token) {
+        throw new Error('No authentication token')
+      }
+      
+      const response = await axios.get('/user', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
       user.value = response.data
       isAuthenticated.value = true
     } catch (error) {
@@ -67,25 +77,68 @@ export const useAuthStore = defineStore('auth', () => {
         password
       })
       
-      // Handle API response
-      const { user: userData, token } = response.data
+      console.log('Login response:', response.data)
       
-      // Save token to cookie
-      if (token) {
-        setCookie('token', token)
+      // Handle API response format from Laravel backend
+      const responseData = response.data
+      
+      if (responseData.success) {
+        // Extract token from response
+        const token = responseData.data?.token
+        
+        if (token) {
+          // Save token to cookie
+          setCookie('token', token)
+          
+          // Set authenticated state
+          isAuthenticated.value = true
+          
+          // Try to fetch user details with the new token
+          try {
+            await fetchUserProfile()
+          } catch (profileError) {
+            console.error('Error fetching user profile:', profileError)
+            // Continue with login even if profile fetch fails
+          }
+          
+          console.log('Login successful')
+          router.push('/dashboard')
+          return responseData
+        } else {
+          throw new Error('No token received from server')
+        }
+      } else {
+        throw new Error(responseData.message || 'Unknown error occurred')
       }
-      
-      user.value = userData
-      isAuthenticated.value = true
-      
-      console.log('Login successful')
-      router.push('/dashboard')
     } catch (err: any) {
       console.error('Login error:', err)
-      error.value = err.response?.data?.message || 'Failed to log in'
+      error.value = err.response?.data?.message || err.message || 'Failed to log in'
       throw err
     } finally {
       isLoading.value = false
+    }
+  }
+
+  // Fetch user profile
+  const fetchUserProfile = async () => {
+    try {
+      const token = getCookie('token')
+      if (!token) {
+        throw new Error('No authentication token found')
+      }
+      
+      const response = await axios.get('/user', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      user.value = response.data
+      isAuthenticated.value = true
+      return response.data
+    } catch (error) {
+      console.error('Error fetching user profile:', error)
+      throw error
     }
   }
 

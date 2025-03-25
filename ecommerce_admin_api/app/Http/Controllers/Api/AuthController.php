@@ -9,6 +9,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\HasApiTokens;
+use App\Http\Responses\ApiResponse;
+use App\Constants\StatusCode;
 
 class AuthController extends Controller
 {
@@ -34,24 +36,19 @@ class AuthController extends Controller
                 // Create new token
                 $token = $user->createToken('api-token')->plainTextToken;
                 
-                return response()->json([
-                    'user' => $user,
-                    'token' => $token,
-                    'message' => 'Login successful'
-                ]);
+                return ApiResponse::ok([
+                    // 'user' => $user,
+                    'token' => $token
+                ], 'Login successful', [], StatusCode::STATUS_LOGIN_SUCCESS);
             } else {
                 // Fallback for when Sanctum is not fully configured
-                return response()->json([
-                    'user' => $user,
-                    'message' => 'Login successful (token creation unavailable)'
-                ]);
+                return ApiResponse::ok([
+                    'user' => $user
+                ], 'Login successful (token creation unavailable)', [], StatusCode::STATUS_LOGIN_SUCCESS_NO_TOKEN);
             }
             
         } catch (ValidationException $e) {
-            return response()->json([
-                'message' => 'The provided credentials are incorrect.',
-                'errors' => $e->errors(),
-            ], 422);
+            return ApiResponse::validationError('The provided credentials are incorrect.', $e->errors(), StatusCode::STATUS_LOGIN_INVALID_CREDENTIALS);
         }
     }
     
@@ -68,8 +65,6 @@ class AuthController extends Controller
             $request->user()->tokens()->delete();
         }
         
-        return response()->json([
-            'message' => 'Logged out successfully'
-        ]);
+        return ApiResponse::ok(null, 'Logged out successfully', [], StatusCode::STATUS_LOGOUT_SUCCESS);
     }
 } 

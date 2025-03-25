@@ -1,0 +1,28 @@
+{
+    "OK_200": "ពត៌មានត្រឹមត្រូវ",
+    "SMS_LOGIN_SUCCESS": "ចូលគណនីបានជោគជ័យ",
+    "SMS_LOGIN_SUCCESS_NO_TOKEN": "ចូលគណនីបានជោគជ័យ (មិនមានការបង្កើតថូខិន)",
+    "SMS_LOGOUT_SUCCESS": "ចាកចេញពីគណនីបានជោគជ័យ",
+    "SMS_CREATED_201": "បង្កើតបានជោគជ័យ",
+    "SMS_ACCEPTED_202": "បានទទួលយក",
+    "SMS_NO_CONTENT_204": "គ្មានពត៌មាន",
+    
+    "SMS_BAD_REQUEST_400": "សំណើមិនត្រឹមត្រូវ",
+    "SMS_UNAUTHORIZED_401": "មិនមានការអនុញ្ញាត",
+    "SMS_FORBIDDEN_403": "ហាមឃាត់",
+    "SMS_NOT_FOUND_404": "រកមិនឃើញ",
+    "SMS_VALIDATION_ERROR_422": "កំហុសក្នុងការបញ្ជាក់ទិន្នន័យ",
+    "SMS_LOGIN_INVALID_CREDENTIALS": "ព័ត៌មានដែលផ្តល់ឱ្យមិនត្រឹមត្រូវទេ។",
+    "SMS_SERVER_ERROR_500": "កំហុសក្នុងម៉ាស៊ីនមេ",
+
+    "SMS_CREATED_USER_SUCCESSFULLY": "បង្កើតអ្នកប្រើប្រាស់បានជោគជ័យ",
+    "SMS_CREATED_USER_UNSUCCESSFULLY": "បង្កើតអ្នកប្រើប្រាស់បានបរាជ័យ",
+    "SMS_GET_USER_SUCCESSFULLY": "ទាញយកអ្នកប្រើប្រាស់បានជោគជ័យ",
+    "SMS_GET_USER_UNSUCCESSFULLY": "ទាញយកអ្នកប្រើប្រាស់បានបរាជ័យ",
+    "SMS_GET_USER_NOT_FOUND": "រកមិនឃើញអ្នកប្រើប្រាស់",
+    "SMS_UPDATE_USER_SUCCESSFULLY": "ធ្វើបច្ចុប្បន្នភាពអ្នកប្រើប្រាស់បានជោគជ័យ",
+    "SMS_UPDATE_USER_UNSUCCESSFULLY": "ធ្វើបច្ចុប្បន្នភាពអ្នកប្រើប្រាស់បានបរាជ័យ",
+    "SMS_DELETE_USER_SUCCESSFULLY": "លុបអ្នកប្រើប្រាស់បានជោគជ័យ",
+    "SMS_DELETE_USER_UNSUCCESSFULLY": "លុបអ្នកប្រើប្រាស់បានបរាជ័យ"
+}
+
