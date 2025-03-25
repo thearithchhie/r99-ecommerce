@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 
 // Public routes
-Route::post('login', [AuthController::class, 'login']);
+Route::post('/auth/login', [AuthController::class, 'login']);
 
 // Protected routes
 Route::middleware(['auth:sanctum'])->group(function () {
@@ -13,5 +13,5 @@ Route::middleware(['auth:sanctum'])->group(function () {
         return $request->user();
     });
     
-    Route::post('logout', [AuthController::class, 'logout']);
+    Route::post('/auth/logout', [AuthController::class, 'logout']);
 }); 
