@@ -42,7 +42,7 @@ export const useAuthStore = defineStore('auth', () => {
         throw new Error('No authentication token')
       }
       
-      const response = await axios.get('/user', {
+      const response = await axios.get('/user-profile', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -94,12 +94,12 @@ export const useAuthStore = defineStore('auth', () => {
           isAuthenticated.value = true
           
           // Try to fetch user details with the new token
-          try {
-            await fetchUserProfile()
-          } catch (profileError) {
-            console.error('Error fetching user profile:', profileError)
-            // Continue with login even if profile fetch fails
-          }
+          // try {
+          //   await fetchUserProfile()
+          // } catch (profileError) {
+          //   console.error('Error fetching user profile:', profileError)
+          //   // Continue with login even if profile fetch fails
+          // }
           
           console.log('Login successful')
           router.push('/dashboard')
@@ -127,7 +127,7 @@ export const useAuthStore = defineStore('auth', () => {
         throw new Error('No authentication token found')
       }
       
-      const response = await axios.get('/user', {
+      const response = await axios.get('/user-profile', {
         headers: {
           'Authorization': `Bearer ${token}`
         }

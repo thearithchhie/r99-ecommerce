@@ -11,7 +11,7 @@ namespace App\Constants;
 class StatusCode
 {
     // HTTP status equivalents
-    public const OK_200 = 1000;
+    public const OK = 1000;
     public const STATUS_LOGIN_SUCCESS = 1001;
     public const STATUS_LOGIN_SUCCESS_NO_TOKEN = 1002;
     public const STATUS_LOGOUT_SUCCESS = 1003;

@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Validator;
 
 class UserController extends Controller
 {
@@ -27,13 +28,13 @@ class UserController extends Controller
         // Apply limits to prevent excessive requests
         $perPage = min(max($perPage, $perPage), 100); // Between 5 and 100 items per page
         
-        // Get paginated users
-        $users = User::paginate($perPage, ['*'], 'page', $page);
+        // Get paginated users, explicitly excluding soft deleted users
+        $users = User::whereNull('deleted_at')->paginate($perPage, ['*'], 'page', $page);
         
         // Create response with just the user items
         $response = ApiResponse::ok([
             'users' => $users->items()
-        ], 'Users retrieved successfully', [], StatusCode::OK_200);
+        ], 'Users retrieved successfully', [], StatusCode::OK);
         
         // Add pagination metadata
         return $response->withPagination($users);
@@ -48,13 +49,13 @@ class UserController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'username' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8',
         ]);
 
         $user = User::create([
-            'name' => $validated['name'],
+            'username' => $validated['username'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
         ]);
@@ -70,13 +71,13 @@ class UserController extends Controller
      */
     public function show($id)
     {
-        $user = User::find($id);
+        $user = User::whereNull('deleted_at')->find($id);
         
         if (!$user) {
             return ApiResponse::notFound('User not found', null, StatusCode::STATUS_GET_USER_NOT_FOUND);
         }
 
-        return ApiResponse::ok($user, 'User retrieved successfully', [], StatusCode::OK_200);
+        return ApiResponse::ok($user, 'User retrieved successfully', [], StatusCode::OK);
     }
 
     /**
@@ -88,26 +89,56 @@ class UserController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $user = User::find($id);
-        
+        // Check if the email has changed before running the unique check
+        $rules = [
+            "username" => "string|min:3",
+            "password" => "nullable",
+        ];
+
+        // Custom error messages
+        $messages = [
+            'email.unique' => 'this email is already already',
+        ];
+
+        $user = User::whereNull('deleted_at')->find($id);
         if (!$user) {
             return ApiResponse::notFound('User not found', null, StatusCode::STATUS_GET_USER_NOT_FOUND);
         }
 
-        $validated = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'email' => [
-                'sometimes',
-                'string',
+        // Only validate unique email if it's different from the current user's email
+        if ($request->email !== $user->email) {
+            $rules['email'] = [
+                'required',
                 'email',
-                'max:255',
-                Rule::unique('users')->ignore($user->id),
-            ],
-            'password' => 'sometimes|string|min:8',
-        ]);
+                Rule::unique('users', 'email')->ignore($user->id),
+            ];
+        }
 
-        if (isset($validated['name'])) {
-            $user->name = $validated['name'];
+        // Validate in coming request
+        $validator = Validator::make($request->all(), $rules, $messages);
+
+        if ($validator->fails()) {
+            return ApiResponse::validationError('Validation failed', $validator->errors()->toArray(), StatusCode::STATUS_VALIDATION_ERROR_422);
+        }
+
+        // Get validated data
+        $validated = $validator->validated();
+        
+       
+
+        // i want validate email if it is unique
+        if (isset($validated['email'])) {
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
+            ]);
+
+            if ($validator->fails()) {
+                return ApiResponse::validationError('Validation failed', $validator->errors()->toArray(), StatusCode::STATUS_VALIDATION_ERROR_422);
+            }
+        }
+
+        if (isset($validated['username'])) {
+            $user->username = $validated['username'];
         }
         
         if (isset($validated['email'])) {
@@ -124,21 +155,67 @@ class UserController extends Controller
     }
 
     /**
-     * Remove the specified user.
+     * Remove the specified resource from storage (soft delete).
      *
      * @param  int  $id
      * @return \Illuminate\Http\JsonResponse
      */
     public function destroy($id)
     {
-        $user = User::find($id);
+        $user = User::whereNull('deleted_at')->find($id);
         
         if (!$user) {
             return ApiResponse::notFound('User not found', null, StatusCode::STATUS_GET_USER_NOT_FOUND);
         }
 
+        // This will now perform a soft delete since the SoftDeletes trait is used in the User model
         $user->delete();
 
         return ApiResponse::ok(null, 'User deleted successfully', [], StatusCode::STATUS_DELETE_USER_SUCCESSFULLY);
     }
+
+    /**
+     * Restore a soft-deleted user.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function restore($id)
+    {
+        // Use withTrashed to find the user even if they're soft-deleted
+        $user = User::withTrashed()->find($id);
+        
+        if (!$user) {
+            return ApiResponse::notFound('User not found', null, StatusCode::STATUS_GET_USER_NOT_FOUND);
+        }
+
+        if (!$user->trashed()) {
+            return ApiResponse::badRequest('User is not deleted', null, StatusCode::STATUS_BAD_REQUEST_400);
+        }
+
+        $user->restore();
+
+        return ApiResponse::ok($user, 'User restored successfully', [], StatusCode::OK);
+    }
+
+    /**
+     * List all soft-deleted users.
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function trashed()
+    {
+        $users = User::onlyTrashed()->get();
+        
+        return ApiResponse::ok(['users' => $users], 'Trashed users retrieved successfully', [], StatusCode::OK);
+    }
+
+    public function userProfile(Request $request)
+    {
+        //! built-in user() method
+        $user = $request->user(); //This retrieves the currently authenticated user.
+        return ApiResponse::ok($user, 'User profile retrieved successfully', [], StatusCode::OK);
+    }
+
+
 } 

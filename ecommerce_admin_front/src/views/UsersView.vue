@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import { Search, ChevronLeft, ChevronRight, RefreshCw, UserPlus, ArrowUp, ArrowDown, Pencil, Trash2, Eye } from 'lucide-vue-next';
+import { ref, computed, onMounted, watch } from 'vue';
+import { Search, ChevronLeft, ChevronRight, RefreshCw, UserPlus, ArrowUp, ArrowDown, Pencil, Trash2, Eye, Undo2 } from 'lucide-vue-next';
 import { Button } from '@/components/ui/button';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import axios from '@/lib/axios';
 import { useToast } from '@/components/ui/toast';
 import { Pagination, PaginationList, PaginationFirst, PaginationPrev, PaginationNext, PaginationLast, PaginationListItem, PaginationEllipsis } from '@/components/ui/pagination';
@@ -11,11 +11,12 @@ import { Pagination, PaginationList, PaginationFirst, PaginationPrev, Pagination
 // Define user type
 interface User {
   id: number;
-  name: string;
+  username: string;
   email: string;
   role?: string;
   created_at?: string;
   updated_at?: string;
+  deleted_at?: string | null;
   [key: string]: any; // Allow for additional properties
 }
 
@@ -27,12 +28,16 @@ interface Pagination {
 }
 
 const router = useRouter();
+const route = useRoute();
 const toast = useToast();
 
 // User data state
 const users = ref<User[]>([]);
 const isLoading = ref(false);
 const loadError = ref<string | null>(null);
+
+// View state - 'active' or 'deleted'
+const viewMode = ref<'active' | 'deleted'>('active');
 
 // Pagination state from API
 const pagination = ref<Pagination>({
@@ -46,66 +51,225 @@ const pagination = ref<Pagination>({
 const showDeleteConfirm = ref(false);
 const userToDelete = ref<number | null>(null);
 
+// Add these variables for edit modal
+const showEditModal = ref(false);
+const userToEdit = ref<User | null>(null);
+const editFormData = ref({
+  username: '',
+  email: '',
+  password: '' // Optional - will only be sent if not empty
+});
+const editFormErrors = ref({
+  username: '',
+  email: '',
+  password: ''
+});
+
+// Track recently updated user to highlight
+const recentlyUpdatedUserId = ref<number | null>(null);
+
 // Fetch users from the API
-const fetchUsers = async (page = 1, perPage = 10, query = '') => {
-  isLoading.value = true;
-  loadError.value = null;
-  
+const fetchUsers = async (page = 1, perPage = 10, search = '') => {
   try {
-    const params = new URLSearchParams();
-    params.append('page', page.toString());
-    params.append('per_page', perPage.toString());
+    isLoading.value = true;
+    loadError.value = null;
     
-    if (query) {
-      params.append('search', query);
+    // Determine the endpoint based on view mode
+    const endpoint = viewMode.value === 'active' ? '/users' : '/users/trashed';
+    
+    console.log(`Fetching users for ${viewMode.value} view, page ${page}, perPage ${perPage}, search: "${search}"`);
+    console.log(`Using endpoint: ${endpoint}`);
+    
+    // Make API request with selected parameters
+    const response = await axios.get(endpoint, {
+      params: { 
+        page,
+        per_page: perPage,
+        search: search || undefined
+      }
+    });
+    
+    console.log('API Response status:', response.status);
+    
+    // Extract data from response and handle accordingly
+    const responseData = response.data;
+    
+    // Log full response in development for debugging
+    if (import.meta.env.DEV) {
+      console.log('Full API Response:', JSON.stringify(responseData, null, 2));
     }
     
-    const response = await axios.get(`/users?${params.toString()}`);
-    
-    if (response.data.success) {
-      // Extract users and pagination data from the API response format
-      if (response.data.data && Array.isArray(response.data.data.users)) {
-        // Ensure each user has at least empty strings for required properties
+    // Handle different API response structures
+    if (responseData) {
+      try {
+        // Extract users data
+        let usersData: any[] = [];
         
-        //FIXME: When we implement the backend, we need to remove this
-        users.value = response.data.data.users.map((user: any) => ({
+        if (Array.isArray(responseData)) {
+          // Direct array of users
+          usersData = responseData;
+        } 
+        else if (responseData.data && Array.isArray(responseData.data)) {
+          // Object with data property containing array
+          usersData = responseData.data;
+        }
+        else if (responseData.data && responseData.data.users && Array.isArray(responseData.data.users)) {
+          // Nested structure: data.users array
+          usersData = responseData.data.users;
+        }
+        else if (responseData.users && Array.isArray(responseData.users)) {
+          // Object with users property containing array
+          usersData = responseData.users;
+        }
+        else {
+          console.error('Could not find users array in response:', responseData);
+          usersData = [];
+        }
+        
+        // Update the users state
+        users.value = usersData.map((user: any) => ({
           id: user.id,
-          name: user.name || '',
+          username: user.username || user.name || '',
           email: user.email || '',
           role: user.role || 'User',
-          created_at: user.created_at || '',
-          updated_at: user.updated_at || '',
+          deleted_at: user.deleted_at || null,
           ...user
         }));
-      } else {
-        console.warn('Unexpected API response format:', response.data);
+        
+        // Extract pagination data
+        let paginationData = {
+          current_page: page,
+          total: usersData.length,
+          per_page: perPage,
+          last_page: Math.ceil(usersData.length / perPage) || 1
+        };
+        
+        // Try to find pagination data in different locations
+        if (responseData.meta && responseData.meta.pagination) {
+          // Format: { meta: { pagination: {...} } }
+          paginationData = {
+            current_page: responseData.meta.pagination.current_page || page,
+            total: responseData.meta.pagination.total || usersData.length,
+            per_page: responseData.meta.pagination.per_page || perPage,
+            last_page: responseData.meta.pagination.last_page || Math.ceil(usersData.length / perPage) || 1
+          };
+        } 
+        else if (responseData.pagination) {
+          // Format: { pagination: {...} }
+          paginationData = {
+            current_page: responseData.pagination.current_page || page,
+            total: responseData.pagination.total || usersData.length,
+            per_page: responseData.pagination.per_page || perPage,
+            last_page: responseData.pagination.last_page || Math.ceil(usersData.length / perPage) || 1
+          };
+        }
+        else if (responseData.current_page !== undefined) {
+          // Format: direct pagination properties in response
+          paginationData = {
+            current_page: responseData.current_page || page,
+            total: responseData.total || usersData.length,
+            per_page: responseData.per_page || perPage,
+            last_page: responseData.last_page || Math.ceil(usersData.length / perPage) || 1
+          };
+        }
+        
+        // Update pagination state
+        pagination.value = paginationData;
+        
+        console.log(`Loaded ${users.value.length} users`);
+        console.log(`Pagination: page ${pagination.value.current_page}/${pagination.value.last_page}, total: ${pagination.value.total}`);
+      } catch (parseError) {
+        console.error('Error processing API response:', parseError);
         users.value = [];
       }
-      
-      // Extract pagination data if available
-      if (response.data.meta && response.data.meta.pagination) {
-        pagination.value = response.data.meta.pagination;
-      }
     } else {
-      throw new Error(response.data.message || 'Failed to fetch users');
+      console.error('Empty or invalid API response');
+      users.value = [];
     }
+    
+    // Update URL if needed
+    updateUrlWithCurrentPage();
+    
+    // Process highlight user if needed
+    processHighlightedUser();
+    
   } catch (error: any) {
+    console.error('Error fetching users:', error);
     loadError.value = error.response?.data?.message || error.message || 'Failed to fetch users';
     toast.toast({
       title: 'Error',
       description: loadError.value,
       variant: 'destructive'
     });
-    console.error('Error fetching users:', error);
   } finally {
-    // Always set loading to false when done
     isLoading.value = false;
+  }
+};
+
+// Update URL with current page
+const updateUrlWithCurrentPage = () => {
+  // Only proceed if we have a valid pagination state
+  if (pagination.value && pagination.value.current_page) {
+    const currentPage = parseInt(route.query.page as string) || 1;
+    if (currentPage !== pagination.value.current_page) {
+      console.log(`Updating URL: page ${currentPage} → ${pagination.value.current_page}`);
+      router.replace({
+        query: {
+          ...route.query,
+          page: String(pagination.value.current_page)
+        }
+      });
+    }
+  }
+};
+
+// Separate function to process highlighted user
+const processHighlightedUser = () => {
+  if (route.query.highlight_user) {
+    const highlightId = parseInt(route.query.highlight_user as string);
+    // Find the user in the current page
+    const highlightedUser = users.value.find(user => user.id === highlightId);
+    if (highlightedUser) {
+      console.log('Found highlighted user:', highlightedUser);
+      recentlyUpdatedUserId.value = highlightId;
+      // Remove the highlight_user from the URL after a short delay
+      setTimeout(() => {
+        const currentQuery = { ...route.query };
+        delete currentQuery.highlight_user;
+        router.replace({ query: currentQuery });
+        // Clear the highlight after the animation finishes
+        setTimeout(() => {
+          recentlyUpdatedUserId.value = null;
+        }, 2000);
+      }, 500);
+    } else {
+      console.log(`Highlighted user ${highlightId} not found on current page`);
+    }
   }
 };
 
 // Refresh data
 const refreshData = () => {
   fetchUsers(pagination.value.current_page, pagination.value.per_page, searchQuery.value);
+};
+
+// Toggle view between active and deleted users
+const toggleView = () => {
+  // Toggle the view mode
+  viewMode.value = viewMode.value === 'active' ? 'deleted' : 'active';
+  
+  console.log(`View mode changed to: ${viewMode.value}`);
+  
+  // Always reset to page 1 when switching views
+  router.replace({
+    query: {
+      ...route.query,
+      page: '1'
+    }
+  });
+  
+  // Fetch users with new view mode
+  fetchUsers(1, pagination.value.per_page, searchQuery.value);
 };
 
 // Confirm delete user
@@ -146,6 +310,36 @@ const handleDelete = async () => {
   }
 };
 
+// Restore deleted user
+const handleRestore = async (userId: number) => {
+  try {
+    isLoading.value = true;
+    
+    const response = await axios.patch(`/users/${userId}/restore`);
+    
+    if (response.data.success) {
+      toast.toast({
+        title: 'Success',
+        description: 'User restored successfully'
+      });
+      
+      // Refresh the user list
+      refreshData();
+    } else {
+      throw new Error(response.data.message || 'Failed to restore user');
+    }
+  } catch (error: any) {
+    toast.toast({
+      title: 'Error',
+      description: error.response?.data?.message || error.message || 'Failed to restore user',
+      variant: 'destructive'
+    });
+    console.error('Error restoring user:', error);
+  } finally {
+    isLoading.value = false;
+  }
+};
+
 // Cancel delete
 const cancelDelete = () => {
   userToDelete.value = null;
@@ -153,9 +347,16 @@ const cancelDelete = () => {
 };
 
 // Edit user
-const handleEdit = (userId: number) => {
-  // Redirect to user edit page
-  router.push(`/users/${userId}/edit`);
+const handleEdit = (user: User) => {
+  // Get the current page directly from the URL if available, otherwise from pagination state
+  const currentPage = route.query.page ? route.query.page.toString() : pagination.value.current_page.toString();
+  console.log('Sending to edit with page:', currentPage);
+  
+  // Redirect to user edit page with current page information
+  router.push({
+    path: `/users/${user.id}/edit`,
+    query: { from_page: currentPage }
+  });
 };
 
 // View user details
@@ -171,13 +372,36 @@ const handleAddUser = () => {
 
 // Search
 const searchQuery = ref('');
+
+// Initialize searchQuery from URL on component mount if it exists
+watch(() => route.query.search, (newSearch) => {
+  if (newSearch !== undefined && newSearch !== searchQuery.value) {
+    console.log(`Setting search query from URL: "${newSearch}"`);
+    searchQuery.value = newSearch as string;
+  }
+}, { immediate: true });
+
 const handleSearch = () => {
-  // Reset to first page when searching
+  console.log(`Searching for: "${searchQuery.value}"`);
+  
+  // When searching, we always start from page 1
+  // Update the URL to reflect the search and page reset
+  const queryParams: Record<string, string> = { page: '1' };
+  
+  // Only add search param if there's actually a search term
+  if (searchQuery.value) {
+    queryParams.search = searchQuery.value;
+  }
+  
+  // Replace URL with new search parameters
+  router.replace({ query: queryParams });
+  
+  // Force a fetch since we're changing the search parameters
   fetchUsers(1, pagination.value.per_page, searchQuery.value);
 };
 
 // Sorting
-const sortColumn = ref('name');
+const sortColumn = ref('username');
 const sortDirection = ref('asc');
 
 const toggleSort = (column: string) => {
@@ -208,9 +432,28 @@ const toggleSort = (column: string) => {
 
 // Pagination navigation
 const goToPage = (page: number) => {
-  if (page >= 1 && page <= pagination.value.last_page) {
-    fetchUsers(page, pagination.value.per_page, searchQuery.value);
+  if (isNaN(page) || page < 1) {
+    console.warn(`Invalid page number: ${page}, defaulting to page 1`);
+    page = 1;
   }
+  
+  const lastPage = pagination.value.last_page || 1;
+  if (page > lastPage) {
+    console.warn(`Page ${page} exceeds last page ${lastPage}, setting to last page`);
+    page = lastPage;
+  }
+  
+  console.log(`Going to page ${page} via goToPage function`);
+  
+  // Update URL first
+  router.replace({
+    query: { 
+      ...route.query,
+      page: page.toString() 
+    }
+  });
+  
+  // The actual data fetching will be handled by the route watcher
 };
 
 // Helper functions
@@ -227,31 +470,199 @@ const getSortIcon = (column: string) => {
   return sortDirection.value === 'asc' ? ArrowUp : ArrowDown;
 };
 
-const paginationConfig = computed(() => ({
-  itemsPerPage: pagination.value.per_page,
-  total: pagination.value.total,
-  currentPage: pagination.value.current_page
-}));
+const paginationConfig = computed(() => {
+  console.log('Computing pagination config:', {
+    itemsPerPage: pagination.value.per_page || 10,
+    total: pagination.value.total || 0,
+    currentPage: pagination.value.current_page || 1,
+    lastPage: pagination.value.last_page || 1
+  });
+  
+  return {
+    itemsPerPage: pagination.value.per_page || 10,
+    total: pagination.value.total || 0,
+    currentPage: pagination.value.current_page || 1,
+    lastPage: pagination.value.last_page || 1
+  };
+});
 
 // Handle page change from shadcn pagination component
 const handlePageChange = (newPage: number) => {
+  if (!newPage || isNaN(newPage) || newPage < 1) {
+    console.warn(`Invalid page number: ${newPage}, defaulting to page 1`);
+    newPage = 1;
+  }
+  
+  console.log(`Changing to page ${newPage} via handlePageChange function`);
   goToPage(newPage);
 };
 
-// Initial data loading
+// Watch for route changes to update the page
+watch(() => route.query.page, (newPage, oldPage) => {
+  console.log(`Route page changed from ${oldPage} to ${newPage}`);
+  
+  try {
+    if (newPage) {
+      const page = parseInt(newPage as string);
+      
+      if (isNaN(page) || page < 1) {
+        console.warn(`Invalid page number in URL: ${newPage}, defaulting to page 1`);
+        fetchUsers(1, pagination.value.per_page || 10, searchQuery.value);
+        return;
+      }
+      
+      // Only fetch if the page is different from current pagination state
+      // This prevents duplicate fetches when we update the URL ourselves
+      if (page !== pagination.value.current_page) {
+        console.log(`Fetching data for page ${page} due to route change`);
+        fetchUsers(page, pagination.value.per_page || 10, searchQuery.value);
+      } else {
+        console.log(`Page ${page} already matches current pagination state, skipping fetch`);
+      }
+    } else {
+      // If page is removed from URL, default to page 1
+      console.log('No page in URL, defaulting to page 1');
+      fetchUsers(1, pagination.value.per_page || 10, searchQuery.value);
+    }
+  } catch (error) {
+    console.error('Error in page route watcher:', error);
+    // Fallback to page 1 if there's an error
+    fetchUsers(1, pagination.value.per_page || 10, searchQuery.value);
+  }
+}, { immediate: true });
+
+// Initial component setup
 onMounted(() => {
-  fetchUsers(1, 10);
+  console.log('Users component mounted');
+  
+  // Force initial fetch to ensure we have data
+  const initialPage = route.query.page ? parseInt(route.query.page as string) : 1;
+  
+  // Only fetch if we don't already have users (which might happen if the route watcher triggered first)
+  if (users.value.length === 0) {
+    console.log(`Initial fetch for page ${initialPage} - no users loaded yet`);
+    fetchUsers(initialPage, pagination.value.per_page || 10, searchQuery.value);
+  } else {
+    console.log(`Skipping initial fetch - ${users.value.length} users already loaded`);
+  }
 });
+
+// Function to open edit modal with user data
+const openEditModal = (user: User) => {
+  userToEdit.value = user;
+  editFormData.value = {
+    username: user.username,
+    email: user.email,
+    password: '' // Start with empty password
+  };
+  // Clear previous errors
+  resetEditFormErrors();
+  showEditModal.value = true;
+};
+
+// Function to clear form errors
+const resetEditFormErrors = () => {
+  editFormErrors.value = {
+    username: '',
+    email: '',
+    password: ''
+  };
+};
+
+// Function to handle user edit form submission
+const handleEditSubmit = async () => {
+  resetEditFormErrors();
+  
+  // Simple validation
+  let hasErrors = false;
+  
+  if (!editFormData.value.username.trim()) {
+    editFormErrors.value.username = 'Username is required';
+    hasErrors = true;
+  }
+  
+  if (!editFormData.value.email.trim()) {
+    editFormErrors.value.email = 'Email is required';
+    hasErrors = true;
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editFormData.value.email)) {
+    editFormErrors.value.email = 'Invalid email format';
+    hasErrors = true;
+  }
+  
+  if (editFormData.value.password && editFormData.value.password.length < 8) {
+    editFormErrors.value.password = 'Password must be at least 8 characters';
+    hasErrors = true;
+  }
+  
+  if (hasErrors) return;
+  
+  // Proceed with API update
+  try {
+    isLoading.value = true;
+    
+    // Prepare data - only include password if it's not empty
+    const updateData: Record<string, string> = {
+      username: editFormData.value.username,
+      email: editFormData.value.email
+    };
+    
+    if (editFormData.value.password) {
+      updateData.password = editFormData.value.password;
+    }
+    
+    const response = await axios.put(`/users/${userToEdit.value?.id}`, updateData);
+    
+    if (response.data.success) {
+      toast.toast({
+        title: 'Success',
+        description: 'User updated successfully'
+      });
+      
+      // Close modal and refresh data
+      showEditModal.value = false;
+      refreshData();
+    } else {
+      throw new Error(response.data.message || 'Failed to update user');
+    }
+  } catch (error: any) {
+    // Handle validation errors from API
+    if (error.response?.data?.errors) {
+      const apiErrors = error.response.data.errors;
+      if (apiErrors.username) editFormErrors.value.username = apiErrors.username[0];
+      if (apiErrors.email) editFormErrors.value.email = apiErrors.email[0];
+      if (apiErrors.password) editFormErrors.value.password = apiErrors.password[0];
+    } else {
+      toast.toast({
+        title: 'Error',
+        description: error.response?.data?.message || error.message || 'Failed to update user',
+        variant: 'destructive'
+      });
+    }
+    console.error('Error updating user:', error);
+  } finally {
+    isLoading.value = false;
+  }
+};
 </script>
 
 <template>
   <div>
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-2xl font-bold">Users</h1>
-      <Button class="flex items-center gap-2" @click="handleAddUser">
-        <UserPlus class="h-4 w-4" />
-        Add User
-      </Button>
+      <div class="flex gap-2">
+        <Button 
+          variant="outline" 
+          class="flex items-center gap-2" 
+          @click="toggleView"
+        >
+          <Undo2 class="h-4 w-4" />
+          {{ viewMode === 'active' ? 'Show Deleted Users' : 'Show Active Users' }}
+        </Button>
+        <Button class="flex items-center gap-2" @click="handleAddUser">
+          <UserPlus class="h-4 w-4" />
+          Add User
+        </Button>
+      </div>
     </div>
 
     <div class="bg-white rounded-lg shadow">
@@ -295,8 +706,11 @@ onMounted(() => {
       <!-- Empty state -->
       <div v-else-if="!isLoading && users.length === 0" class="flex justify-center items-center p-12">
         <div class="text-center">
-          <p class="text-gray-500 mb-4">No users found</p>
-          <Button @click="handleAddUser">Add Your First User</Button>
+          <p class="text-gray-500 mb-4">
+            {{ viewMode === 'active' ? 'No users found' : 'No deleted users found' }}
+          </p>
+          <Button @click="handleAddUser" v-if="viewMode === 'active'">Add Your First User</Button>
+          <Button @click="toggleView" v-else>View Active Users</Button>
         </div>
       </div>
 
@@ -313,11 +727,11 @@ onMounted(() => {
               <th 
                 scope="col" 
                 class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                @click="toggleSort('name')"
+                @click="toggleSort('username')"
               >
                 <div class="flex items-center gap-1">
-                  Name
-                  <component :is="getSortIcon('name')" v-if="getSortIcon('name')" class="h-3 w-3" />
+                  Username
+                  <component :is="getSortIcon('username')" v-if="getSortIcon('username')" class="h-3 w-3" />
                 </div>
               </th>
               <th 
@@ -346,14 +760,24 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-for="user in users" :key="user.id">
+            <tr 
+              v-for="user in users" 
+              :key="user.id" 
+              :class="{ 
+                'bg-red-50': user.deleted_at,
+                'bg-blue-50 transition-colors duration-500': recentlyUpdatedUserId === user.id 
+              }"
+            >
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">
                   <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-semibold mr-3">
-                    {{ user && user.name ? user.name.charAt(0) : '?' }}
+                    {{ user && (user.name || user.username) ? (user.name || user.username).charAt(0) : '?' }}
                   </div>
                   <div class="text-sm font-medium text-gray-900">
-                    {{ user && user.name ? user.name : 'Unnamed User' }}
+                    {{ user && (user.name || user.username) ? (user.name || user.username) : 'Unnamed User' }}
+                    <span v-if="user.deleted_at" class="ml-2 text-xs font-normal text-red-500">
+                      (Deleted)
+                    </span>
                   </div>
                 </div>
               </td>
@@ -365,7 +789,22 @@ onMounted(() => {
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                 <div class="flex space-x-2">
-                  <div class="relative inline-flex items-center justify-center">
+                  <!-- Show restore button for deleted users -->
+                  <div v-if="viewMode === 'deleted'" class="relative inline-flex items-center justify-center">
+                    <div class="absolute inset-0 rounded-full border-2 border-purple-400"></div>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      class="h-8 w-8 p-0 flex items-center justify-center text-purple-600 hover:text-purple-800 hover:bg-purple-50 z-10"
+                      @click="handleRestore(user.id)"
+                    >
+                      <Undo2 class="h-3.5 w-3.5" />
+                      <span class="sr-only">Restore User</span>
+                    </Button>
+                  </div>
+                  
+                  <!-- Show view button only for active users -->
+                  <div v-if="viewMode === 'active'" class="relative inline-flex items-center justify-center">
                     <div class="absolute inset-0 rounded-full border-2 border-green-400"></div>
                     <Button 
                       variant="ghost" 
@@ -378,20 +817,22 @@ onMounted(() => {
                     </Button>
                   </div>
                   
-                  <div class="relative inline-flex items-center justify-center">
+                  <!-- Show edit button only for active users -->
+                  <div v-if="viewMode === 'active'" class="relative inline-flex items-center justify-center">
                     <div class="absolute inset-0 rounded-full border-2 border-blue-400"></div>
                     <Button 
                       variant="ghost" 
                       size="sm" 
                       class="h-8 w-8 p-0 flex items-center justify-center text-blue-600 hover:text-blue-800 hover:bg-blue-50 z-10"
-                      @click="handleEdit(user.id)"
+                      @click="handleEdit(user)"
                     >
                       <Pencil class="h-3.5 w-3.5" />
                       <span class="sr-only">Edit</span>
                     </Button>
                   </div>
                   
-                  <div class="relative inline-flex items-center justify-center">
+                  <!-- Show delete button only for active users -->
+                  <div v-if="viewMode === 'active'" class="relative inline-flex items-center justify-center">
                     <div class="absolute inset-0 rounded-full border-2 border-red-400"></div>
                     <Button 
                       variant="ghost" 
@@ -421,6 +862,7 @@ onMounted(() => {
         <div class="flex-1 flex justify-end">
           <Pagination 
             v-slot="{ page }" 
+            :key="`pagination-${paginationConfig.currentPage}-${paginationConfig.total}`"
             :items-per-page="paginationConfig.itemsPerPage" 
             :total="paginationConfig.total" 
             :sibling-count="1"
@@ -504,7 +946,7 @@ onMounted(() => {
       <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
         <h3 class="text-lg font-medium text-gray-900 mb-4">Confirm Deletion</h3>
         <p class="text-sm text-gray-500 mb-6">
-          Are you sure you want to delete this user? This action cannot be undone.
+          Are you sure you want to delete this user? This action can be undone later.
         </p>
         <div class="flex justify-end space-x-3">
           <Button 
@@ -524,6 +966,4 @@ onMounted(() => {
       </div>
     </div>
   </div>
-  
-  
 </template>
