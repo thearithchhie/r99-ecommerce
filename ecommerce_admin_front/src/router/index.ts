@@ -54,17 +54,38 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'users',
         name: 'users',
-        component: () => import('@/views/UsersView.vue')
+        component: () => import('@/views/UsersView.vue'),
+        meta: { requiresPermission: 'view users' }
       },
       {
         path: 'users/:id',
         name: 'userDetail',
-        component: () => import('@/views/UserDetailView.vue')
+        component: () => import('@/views/UserDetailView.vue'),
+        meta: { requiresPermission: 'view users' }
       },
       {
         path: 'users/:id/edit',
         name: 'userEdit',
-        component: () => import('@/views/UserEditPage.vue')
+        component: () => import('@/views/UserEditPage.vue'),
+        meta: { requiresPermission: 'update users' }
+      },
+      {
+        path: 'roles',
+        name: 'roles',
+        component: () => import('@/views/RolesView.vue'),
+        meta: { requiresPermission: 'view roles' }
+      },
+      {
+        path: 'permissions',
+        name: 'permissions',
+        component: () => import('@/views/PermissionsView.vue'),
+        meta: { requiresPermission: 'view permissions' }
+      },
+      {
+        path: 'user-roles',
+        name: 'userRoles',
+        component: () => import('@/views/UserRolesView.vue'),
+        meta: { requiresPermission: 'assign roles' }
       }
     ]
   },
@@ -99,7 +120,7 @@ const router = createRouter({
 })
 
 // Navigation Guards
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   // Check for auth token (better than isAuthenticated cookie)
   const hasAuthToken = getCookie('token') !== null
   
@@ -109,7 +130,48 @@ router.beforeEach((to, from, next) => {
     if (!hasAuthToken) {
       next({ name: 'login' })
     } else {
-      next() // Allow access
+      // Check for permission requirements
+      const requiresPermission = to.matched.find(record => record.meta.requiresPermission)
+      
+      if (requiresPermission && requiresPermission.meta.requiresPermission) {
+        try {
+          // Check if user has the required permission
+          const permissionName = requiresPermission.meta.requiresPermission as string
+          const response = await fetch('/api/check-permission', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${getCookie('token')}`
+            },
+            body: JSON.stringify({ permission: permissionName })
+          })
+          
+          if (response.ok) {
+            const data = await response.json()
+            if (data.hasPermission) {
+              next() // User has permission, allow access
+            } else {
+              // Redirect to dashboard with error message
+              next({ 
+                name: 'dashboard', 
+                query: { 
+                  permissionError: `You don't have permission to access this page`
+                } 
+              })
+            }
+          } else {
+            // API error, allow access but log error
+            console.error('Error checking permission:', await response.text())
+            next()
+          }
+        } catch (error) {
+          // Network error, allow access but log error
+          console.error('Error checking permission:', error)
+          next()
+        }
+      } else {
+        next() // No permission required, allow access
+      }
     }
   } else {
     // For login route, redirect to dashboard if already authenticated

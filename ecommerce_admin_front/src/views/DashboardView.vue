@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import PermissionAlert from '@/components/PermissionAlert.vue'
 
 const stats = ref([
   {
@@ -64,6 +65,8 @@ const getStatusVariant = (status: string) => {
 
 <template>
   <div class="space-y-6">
+    <PermissionAlert />
+    
     <div>
       <h2 class="text-3xl font-bold tracking-tight">Dashboard</h2>
       <p class="text-muted-foreground">

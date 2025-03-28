@@ -53,6 +53,9 @@ class ApiResponse implements Responsable
      */
     protected $translationKey;
 
+    const ROLE_ADMIN = 'Admin';
+    const ROLE_SUPPORT = 'Support';
+
     /**
      * Create a new API response instance.
      *

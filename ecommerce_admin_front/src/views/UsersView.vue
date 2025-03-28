@@ -75,7 +75,7 @@ const fetchUsers = async (page = 1, perPage = 10, search = '') => {
     loadError.value = null;
     
     // Determine the endpoint based on view mode
-    const endpoint = viewMode.value === 'active' ? '/users' : '/users/trashed';
+    const endpoint = viewMode.value === 'active' ? '/api/v1/users' : '/api/v1/users/trashed';
     
     console.log(`Fetching users for ${viewMode.value} view, page ${page}, perPage ${perPage}, search: "${search}"`);
     console.log(`Using endpoint: ${endpoint}`);

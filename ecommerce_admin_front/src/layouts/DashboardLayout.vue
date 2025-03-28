@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
-import { Menu, ChevronDown, User, Settings, LogOut, LayoutDashboard, Package, ShoppingCart, Users, X } from 'lucide-vue-next'
+import { ref, computed, watch, onMounted, reactive } from 'vue'
+import { Menu, ChevronDown, User, Settings, LogOut, LayoutDashboard, Package, ShoppingCart, Users, X, Shield, Key, UserCog } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -12,18 +12,11 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
 import { useRouter } from 'vue-router'
 import { useToast } from '@/components/ui/toast'
 import { useAuthStore } from '@/stores/auth'
+import LogoutDialog from '@/components/ui/logout-dialog.vue'
+import { canAccessRoute, routePermissionMap, clearPermissionCache, isAdmin } from '@/lib/permissionChecker'
 
 const router = useRouter()
 const toast = useToast()
@@ -31,10 +24,13 @@ const authStore = useAuthStore()
 const isSidebarOpen = ref(false)
 const isDropdownOpen = ref(false)
 const showLogoutDialog = ref(false)
+const visibleNavItems = ref<any[]>([])
+const isLoadingPermissions = ref(true)
 
 // Close dropdown on route change
 watch(() => router.currentRoute.value.path, () => {
   isDropdownOpen.value = false
+  showLogoutDialog.value = false
 })
 
 // Use auth store for user data
@@ -56,13 +52,50 @@ const userData = computed(() => {
   }
 })
 
-const navigationItems = [
-  { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { name: 'Products', path: '/products', icon: Package },
-  { name: 'Orders', path: '/orders', icon: ShoppingCart },
-  { name: 'Customers', path: '/customers', icon: Users },
-  { name: 'Users', path: '/users', icon: User },
+// Define all potential navigation items
+const allNavigationItems = [
+  { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, requiresPermission: null },
+  { name: 'Products', path: '/products', icon: Package, requiresPermission: 'view products' },
+  { name: 'Orders', path: '/orders', icon: ShoppingCart, requiresPermission: 'view orders' },
+  { name: 'Customers', path: '/customers', icon: Users, requiresPermission: 'view customers' },
+  { name: 'Users', path: '/users', icon: User, requiresPermission: 'view users' },
+  { name: 'Roles', path: '/roles', icon: Shield, requiresPermission: 'view roles' },
+  { name: 'Permissions', path: '/permissions', icon: Key, requiresPermission: 'view permissions' },
+  { name: 'User Roles', path: '/user-roles', icon: UserCog, requiresPermission: 'assign roles' },
 ]
+
+// Function to load navigation items based on permissions
+const loadNavigationItems = async () => {
+  isLoadingPermissions.value = true
+  try {
+    // Check if user is admin first
+    const userIsAdmin = await isAdmin();
+    
+    if (userIsAdmin) {
+      // Admin users see all navigation items
+      visibleNavItems.value = allNavigationItems;
+      console.log('Admin user detected - showing all navigation items');
+    } else {
+      // For non-admin users, filter based on permissions
+      const filteredItems = [];
+      
+      for (const item of allNavigationItems) {
+        // If no permission required or user has permission, include it
+        if (!item.requiresPermission || await canAccessRoute(item.path)) {
+          filteredItems.push(item);
+        }
+      }
+      
+      visibleNavItems.value = filteredItems;
+    }
+  } catch (error) {
+    console.error('Error loading navigation items:', error);
+    // Fall back to showing just the dashboard if permission checks fail
+    visibleNavItems.value = allNavigationItems.filter(item => !item.requiresPermission);
+  } finally {
+    isLoadingPermissions.value = false;
+  }
+}
 
 const toggleSidebar = () => {
   isSidebarOpen.value = !isSidebarOpen.value
@@ -72,6 +105,8 @@ const handleLogout = async () => {
   try {
     showLogoutDialog.value = false
     await authStore.logout()
+    // Clear permission cache on logout
+    clearPermissionCache()
     toast.toast({
       title: 'Logged out successfully',
       description: 'You have been logged out of your account.',
@@ -95,6 +130,9 @@ const getCookie = (name: string) => {
 
 // Check authentication when component mounts
 onMounted(async () => {
+  // Explicitly ensure logout dialog is closed on mount
+  showLogoutDialog.value = false
+  
   try {
     // Try to initialize auth state
     await authStore.initAuth()
@@ -103,7 +141,11 @@ onMounted(async () => {
     if (!authStore.isAuthenticated && !getCookie('token')) {
       console.log('Not authenticated, redirecting to login')
       router.push('/auth/login')
+      return
     }
+    
+    // Load navigation items after authentication
+    await loadNavigationItems()
   } catch (error) {
     console.error('Auth check failed:', error)
     router.push('/auth/login')
@@ -112,20 +154,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <Dialog v-model:open="showLogoutDialog">
-    <DialogContent class="sm:max-w-[425px]">
-      <DialogHeader>
-        <DialogTitle>Are you sure you want to logout?</DialogTitle>
-        <DialogDescription class="pt-2">
-          This will end your current session. You will need to login again to access your account.
-        </DialogDescription>
-      </DialogHeader>
-      <DialogFooter class="mt-4">
-        <Button variant="outline" @click="showLogoutDialog = false">Cancel</Button>
-        <Button variant="destructive" @click="handleLogout">Logout</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
+  <!-- Use the new LogoutDialog component -->
+  <LogoutDialog v-model="showLogoutDialog" />
 
   <div class="relative min-h-screen bg-background">
     <!-- Mobile Sidebar -->
@@ -138,8 +168,12 @@ onMounted(async () => {
       </SheetTrigger>
       <SheetContent side="left" class="w-[300px] sm:w-[400px]">
         <nav class="flex flex-col space-y-4">
+          <div v-if="isLoadingPermissions" class="flex justify-center py-4">
+            <div class="animate-spin h-5 w-5 border-2 border-primary rounded-full border-t-transparent"></div>
+          </div>
           <router-link
-            v-for="item in navigationItems"
+            v-else
+            v-for="item in visibleNavItems"
             :key="item.path"
             :to="item.path"
             class="flex items-center space-x-4 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
@@ -167,8 +201,12 @@ onMounted(async () => {
         <h1 class="text-xl font-semibold">Admin Dashboard</h1>
       </div>
       <nav class="flex-1 space-y-1 p-4">
+        <div v-if="isLoadingPermissions" class="flex justify-center py-4">
+          <div class="animate-spin h-5 w-5 border-2 border-primary rounded-full border-t-transparent"></div>
+        </div>
         <router-link
-          v-for="item in navigationItems"
+          v-else
+          v-for="item in visibleNavItems"
           :key="item.path"
           :to="item.path"
           class="flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"

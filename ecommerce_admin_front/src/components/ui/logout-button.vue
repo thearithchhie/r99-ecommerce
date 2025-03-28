@@ -8,12 +8,12 @@ import { useToast } from '@/components/ui/toast'
 // Define props for customizing the button
 const props = defineProps({
   variant: {
-    type: String,
-    default: 'default', // default, destructive, outline, secondary, ghost, link
+    type: String as () => 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link',
+    default: 'default',
   },
   size: {
-    type: String,
-    default: 'default', // default, sm, lg, icon
+    type: String as () => 'default' | 'sm' | 'lg' | 'icon',
+    default: 'default',
   },
   showIcon: {
     type: Boolean,
