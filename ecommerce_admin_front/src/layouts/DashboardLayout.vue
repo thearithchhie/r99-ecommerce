@@ -17,6 +17,7 @@ import { useToast } from '@/components/ui/toast'
 import { useAuthStore } from '@/stores/auth'
 import LogoutDialog from '@/components/ui/logout-dialog.vue'
 import { canAccessRoute, routePermissionMap, clearPermissionCache, isAdmin } from '@/lib/permissionChecker'
+import Sidebar from '@/components/Sidebar.vue'
 
 const router = useRouter()
 const toast = useToast()
@@ -197,25 +198,7 @@ onMounted(async () => {
     <aside
       class="fixed inset-y-0 left-0 z-30 hidden w-64 border-r bg-background md:block"
     >
-      <div class="flex h-16 items-center border-b px-6">
-        <h1 class="text-xl font-semibold">Admin Dashboard</h1>
-      </div>
-      <nav class="flex-1 space-y-1 p-4">
-        <div v-if="isLoadingPermissions" class="flex justify-center py-4">
-          <div class="animate-spin h-5 w-5 border-2 border-primary rounded-full border-t-transparent"></div>
-        </div>
-        <router-link
-          v-else
-          v-for="item in visibleNavItems"
-          :key="item.path"
-          :to="item.path"
-          class="flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
-          :class="{ 'bg-accent text-accent-foreground': $route.path === item.path }"
-        >
-          <component :is="item.icon" class="mr-2 h-4 w-4" />
-          {{ item.name }}
-        </router-link>
-      </nav>
+      <Sidebar />
     </aside>
 
     <!-- Main Content -->

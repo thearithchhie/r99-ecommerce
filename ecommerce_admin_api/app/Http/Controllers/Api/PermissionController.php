@@ -20,7 +20,7 @@ class PermissionController extends Controller
     {
         $permissions = Permission::all();
         
-        return ApiResponse::ok(['permissions' => $permissions], 'Permissions retrieved successfully', [], StatusCode::OK);
+        return ApiResponse::ok(['permissions' => $permissions], 'Permissions retrieved successfully', [], 200);
     }
 
     /**
@@ -36,7 +36,7 @@ class PermissionController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return ApiResponse::validationError('Validation failed', $validator->errors()->toArray(), StatusCode::STATUS_VALIDATION_ERROR_422);
+            return ApiResponse::validationError('Validation failed', $validator->errors()->toArray(), 422);
         }
 
         $validated = $validator->validated();
@@ -46,7 +46,7 @@ class PermissionController extends Controller
             'guard_name' => 'web'
         ]);
         
-        return ApiResponse::created($permission, 'Permission created successfully', [], StatusCode::OK);
+        return ApiResponse::created($permission, 'Permission created successfully', [], 200);
     }
 
     /**
@@ -60,10 +60,10 @@ class PermissionController extends Controller
         $permission = Permission::find($id);
         
         if (!$permission) {
-            return ApiResponse::notFound('Permission not found', null, StatusCode::STATUS_GET_USER_NOT_FOUND);
+            return ApiResponse::notFound('Permission not found', null, 404);
         }
         
-        return ApiResponse::ok($permission, 'Permission retrieved successfully', [], StatusCode::OK);
+        return ApiResponse::ok($permission, 'Permission retrieved successfully', [], 200);
     }
 
     /**
@@ -78,7 +78,7 @@ class PermissionController extends Controller
         $permission = Permission::find($id);
         
         if (!$permission) {
-            return ApiResponse::notFound('Permission not found', null, StatusCode::STATUS_GET_USER_NOT_FOUND);
+            return ApiResponse::notFound('Permission not found', null, 404);
         }
         
         $validator = Validator::make($request->all(), [
@@ -86,7 +86,7 @@ class PermissionController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return ApiResponse::validationError('Validation failed', $validator->errors()->toArray(), StatusCode::STATUS_VALIDATION_ERROR_422);
+            return ApiResponse::validationError('Validation failed', $validator->errors()->toArray(), 422);
         }
 
         $validated = $validator->validated();
@@ -94,7 +94,7 @@ class PermissionController extends Controller
         $permission->name = $validated['name'];
         $permission->save();
         
-        return ApiResponse::ok($permission, 'Permission updated successfully', [], StatusCode::OK);
+        return ApiResponse::ok($permission, 'Permission updated successfully', [], 200);
     }
 
     /**
@@ -108,17 +108,17 @@ class PermissionController extends Controller
         $permission = Permission::find($id);
         
         if (!$permission) {
-            return ApiResponse::notFound('Permission not found', null, StatusCode::STATUS_GET_USER_NOT_FOUND);
+            return ApiResponse::notFound('Permission not found', null, 404);
         }
         
         // Check if this permission is assigned to any roles before deletion
         if ($permission->roles()->count() > 0) {
-            return ApiResponse::badRequest('This permission is assigned to one or more roles and cannot be deleted', null, StatusCode::STATUS_BAD_REQUEST_400);
+            return ApiResponse::badRequest('This permission is assigned to one or more roles and cannot be deleted', null, 400);
         }
         
         $permission->delete();
         
-        return ApiResponse::ok(null, 'Permission deleted successfully', [], StatusCode::OK);
+        return ApiResponse::ok(null, 'Permission deleted successfully', [], 200);
     }
     
     /**
@@ -132,9 +132,9 @@ class PermissionController extends Controller
         $permission = Permission::with('roles')->find($id);
         
         if (!$permission) {
-            return ApiResponse::notFound('Permission not found', null, StatusCode::STATUS_GET_USER_NOT_FOUND);
+            return ApiResponse::notFound('Permission not found', null, 404);
         }
         
-        return ApiResponse::ok(['roles' => $permission->roles], 'Roles with this permission retrieved successfully', [], StatusCode::OK);
+        return ApiResponse::ok(['roles' => $permission->roles], 'Roles with this permission retrieved successfully', [], 200);
     }
 }

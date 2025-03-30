@@ -1,19 +1,73 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Button } from '@/components/ui/button'
 import { Eye, EyeOff, LogIn, AlertCircle } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/components/ui/toast'
+import apiClient, { csrfClient, refreshCsrfToken } from '@/utils/axios'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const toast = useToast()
+const { toast } = useToast()
 
 const email = ref('')
 const password = ref('')
 const showPassword = ref(false)
 const rememberMe = ref(false)
+const apiStatus = ref('Checking API connection...')
+
+// Check API health on mount
+onMounted(async () => {
+  checkApiHealth()
+})
+
+// Check if API is reachable
+const checkApiHealth = async () => {
+  try {
+    apiStatus.value = 'Checking API connection...'
+    
+    const response = await apiClient.get('/health-check')
+    console.log('API health check successful:', response.data)
+    
+    apiStatus.value = 'API connected ✓'
+    
+    return true
+  } catch (error: any) {
+    console.error('API health check error:', error.message)
+    apiStatus.value = `API connection error: ${error.message}`
+    
+    return false
+  }
+}
+
+// Test CSRF token
+const testCsrf = async () => {
+  try {
+    const result = await refreshCsrfToken()
+    
+    if (result) {
+      toast({
+        title: 'CSRF Test Successful',
+        description: 'CSRF token has been refreshed'
+      })
+    } else {
+      toast({
+        title: 'CSRF Test Failed',
+        description: 'Could not refresh CSRF token',
+        variant: 'destructive'
+      })
+    }
+  } catch (error: any) {
+    console.error('CSRF test error:', error)
+    
+    toast({
+      title: 'CSRF Test Error',
+      description: error.message,
+      variant: 'destructive'
+    })
+  }
+}
 
 const toggleShowPassword = () => {
   showPassword.value = !showPassword.value
@@ -22,7 +76,7 @@ const toggleShowPassword = () => {
 const handleLogin = async () => {
   // Basic form validation
   if (!email.value || !password.value) {
-    toast.toast({
+    toast({
       title: 'Error',
       description: 'Please fill in all fields',
       variant: 'destructive'
@@ -33,7 +87,7 @@ const handleLogin = async () => {
   // Simple email validation
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   if (!emailRegex.test(email.value)) {
-    toast.toast({
+    toast({
       title: 'Error',
       description: 'Please enter a valid email address',
       variant: 'destructive'
@@ -42,15 +96,19 @@ const handleLogin = async () => {
   }
   
   try {
+    // First ensure we have a CSRF token
+    await refreshCsrfToken()
+    
+    // Attempt to login
     await authStore.login(email.value, password.value)
     
-    toast.toast({
+    toast({
       title: 'Success',
       description: 'You have been logged in successfully',
     })
   } catch (err: any) {
     console.error('Login error:', err)
-    toast.toast({
+    toast({
       title: 'Error',
       description: authStore.error || 'Failed to login. Please try again.',
       variant: 'destructive'
@@ -66,6 +124,9 @@ const handleLogin = async () => {
         <h2 class="text-3xl font-extrabold text-gray-900">Admin Login</h2>
         <p class="mt-2 text-sm text-gray-600">
           Sign in to your account to access the admin dashboard
+        </p>
+        <p class="mt-1 text-xs" :class="apiStatus.includes('error') ? 'text-red-600' : 'text-green-600'">
+          {{ apiStatus }}
         </p>
       </div>
       
@@ -147,6 +208,26 @@ const handleLogin = async () => {
           </Button>
         </div>
       </form>
+      
+      <!-- Debug tools -->
+      <div class="mt-6 pt-4 border-t border-gray-200">
+        <div class="flex justify-center space-x-4">
+          <button 
+            type="button" 
+            @click="checkApiHealth"
+            class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+          >
+            Test API Connection
+          </button>
+          <button 
+            type="button" 
+            @click="testCsrf"
+            class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+          >
+            Test CSRF Token
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>

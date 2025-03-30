@@ -177,14 +177,10 @@ const handleSubmit = async () => {
     console.log('Update data being sent:', updateData); // Log the data being sent
     const response = await axios.patch(`/users/${userId.value}`, updateData);
     
-    // Log full response for debugging
-    console.log('Full response:', response);
-    
     // Safely check for successful response
     const responseData = response.data;
     
-    // Consider any 2xx status code as success, even with unusual response data
-    if (response.status >= 200 && response.status < 300) {
+    if (responseData && (responseData.success === true || response.status === 200)) {
       // Show success message
       toast.toast({
         title: 'Success',
@@ -301,6 +297,7 @@ onMounted(() => {
             type="password"
             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary focus:border-primary"
             :class="{ 'border-red-500': formErrors.password }"
+            autocomplete="on"
           />
           <p v-if="formErrors.password" class="mt-1 text-sm text-red-600">{{ formErrors.password }}</p>
         </div>

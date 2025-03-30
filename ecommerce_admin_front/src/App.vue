@@ -1,29 +1,51 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { RouterView } from 'vue-router'
-import { ToastProvider } from '@/components/ui/toast'
-import { useAuthStore } from '@/stores/auth'
+import { onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { refreshCsrfToken } from '@/utils/axios'
+import { useAuth } from '@/composables/useAuth'
+import { Toaster } from '@/components/ui/toast'
+import ApiErrorHandler from '@/components/ApiErrorHandler.vue'
 
-const authStore = useAuthStore()
-const appLoaded = ref(false)
+const router = useRouter()
+const route = useRoute()
+const { initAuth, isAuthenticated } = useAuth()
 
-// Initialize auth state
 onMounted(async () => {
+  console.log('App mounted - initializing auth and CSRF token')
+  
   try {
-    await authStore.initAuth()
+    // First ensure we have a CSRF token
+    await refreshCsrfToken()
+    
+    // Initialize authentication
+    const authResult = await initAuth()
+    
+    // Handle route redirection based on auth state
+    const currentRouteName = route.name as string
+    
+    // If user is not authenticated and trying to access a protected route
+    if (!isAuthenticated.value && 
+        route.meta.requiresAuth && 
+        currentRouteName !== 'login') {
+      console.log('Redirecting to login from protected route:', currentRouteName)
+      router.push({ name: 'login' })
+    }
+    
+    // If user is authenticated and trying to access login page
+    if (isAuthenticated.value && currentRouteName === 'login') {
+      console.log('Redirecting to dashboard from login page')
+      router.push({ name: 'dashboard' })
+    }
   } catch (error) {
-    console.error('Failed to initialize auth:', error)
-  } finally {
-    appLoaded.value = true
+    console.error('Error during app initialization:', error)
   }
 })
 </script>
 
 <template>
-  <ToastProvider>
-    <RouterView v-if="appLoaded" />
-    <div v-else class="flex items-center justify-center h-screen">
-      <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
-    </div>
-  </ToastProvider>
+  <div>
+    <RouterView />
+    <Toaster />
+    <ApiErrorHandler />
+  </div>
 </template> 

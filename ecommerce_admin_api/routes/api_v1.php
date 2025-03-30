@@ -7,9 +7,27 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\PermissionController;
 use Illuminate\Support\Facades\Log;
+use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\BrandController;
+use App\Http\Controllers\Api\ColorController;
+use App\Http\Controllers\Api\SizeController;
+use App\Http\Controllers\Api\HealthController;
 
 // Public routes
 Route::post('/auth/login', [AuthController::class, 'login']);
+
+// Health check route - always public
+Route::get('/health-check', [HealthController::class, 'check']);
+
+// Auth test route - for debugging
+Route::get('/auth-test', function() {
+    return response()->json([
+        'success' => true,
+        'message' => 'Authentication test endpoint',
+        'time' => now()->toIso8601String()
+    ]);
+});
 
 // Protected routes
 Route::middleware(['auth:sanctum'])->group(function () {
@@ -59,4 +77,18 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // Permissions Management
     Route::apiResource('permissions', PermissionController::class)->middleware('permission:view permissions');
     Route::get('/permissions/{id}/roles', [PermissionController::class, 'roles'])->middleware('permission:view permissions');
+
+    // Product Management
+    Route::apiResource('products', ProductController::class)->middleware('permission:view products');
+    
+    // Category Management
+    Route::apiResource('categories', CategoryController::class)->middleware('permission:view products');
+    Route::get('/categories/hierarchy', [CategoryController::class, 'hierarchy'])->middleware('permission:view products');
+    
+    // Brand Management
+    Route::apiResource('brands', BrandController::class)->middleware('permission:view products');
+    
+    // Color and Size Management
+    Route::apiResource('colors', ColorController::class)->middleware('permission:view products');
+    Route::apiResource('sizes', SizeController::class)->middleware('permission:view products');
 }); 

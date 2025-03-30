@@ -21,7 +21,7 @@ class RoleController extends Controller
     {
         $roles = Role::with('permissions')->get();
         
-        return ApiResponse::ok(['roles' => $roles], 'Roles retrieved successfully', [], StatusCode::OK);
+        return ApiResponse::ok(['roles' => $roles], 'Roles retrieved successfully', [], 200);
     }
 
     /**
@@ -39,7 +39,7 @@ class RoleController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return ApiResponse::validationError('Validation failed', $validator->errors()->toArray(), StatusCode::STATUS_VALIDATION_ERROR_422);
+            return ApiResponse::validationError('Validation failed', $validator->errors()->toArray(), 422);
         }
 
         $validated = $validator->validated();
@@ -53,7 +53,7 @@ class RoleController extends Controller
             $role->syncPermissions($permissions);
         }
         
-        return ApiResponse::created($role->load('permissions'), 'Role created successfully', [], StatusCode::OK);
+        return ApiResponse::created($role->load('permissions'), 'Role created successfully', [], 200);
     }
 
     /**
@@ -67,10 +67,10 @@ class RoleController extends Controller
         $role = Role::with('permissions')->find($id);
         
         if (!$role) {
-            return ApiResponse::notFound('Role not found', null, StatusCode::STATUS_GET_USER_NOT_FOUND);
+            return ApiResponse::notFound('Role not found', null, 404);
         }
         
-        return ApiResponse::ok($role, 'Role retrieved successfully', [], StatusCode::OK);
+        return ApiResponse::ok($role, 'Role retrieved successfully', [], 200);
     }
 
     /**
@@ -85,7 +85,7 @@ class RoleController extends Controller
         $role = Role::find($id);
         
         if (!$role) {
-            return ApiResponse::notFound('Role not found', null, StatusCode::STATUS_GET_USER_NOT_FOUND);
+            return ApiResponse::notFound('Role not found', null, 404);
         }
         
         $validator = Validator::make($request->all(), [
@@ -95,7 +95,7 @@ class RoleController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return ApiResponse::validationError('Validation failed', $validator->errors()->toArray(), StatusCode::STATUS_VALIDATION_ERROR_422);
+            return ApiResponse::validationError('Validation failed', $validator->errors()->toArray(), 422);
         }
 
         $validated = $validator->validated();
@@ -112,7 +112,7 @@ class RoleController extends Controller
             $role->syncPermissions($permissions);
         }
         
-        return ApiResponse::ok($role->load('permissions'), 'Role updated successfully', [], StatusCode::OK);
+        return ApiResponse::ok($role->load('permissions'), 'Role updated successfully', [], 200);
     }
 
     /**
@@ -126,17 +126,17 @@ class RoleController extends Controller
         $role = Role::find($id);
         
         if (!$role) {
-            return ApiResponse::notFound('Role not found', null, StatusCode::STATUS_GET_USER_NOT_FOUND);
+            return ApiResponse::notFound('Role not found', null, 404);
         }
         
         // Check if it's a system role (e.g., 'Super Admin')
         if ($role->name === 'Super Admin') {
-            return ApiResponse::badRequest('Cannot delete the Super Admin role', null, StatusCode::STATUS_BAD_REQUEST_400);
+            return ApiResponse::badRequest('Cannot delete the Super Admin role', null, 400);
         }
         
         $role->delete();
         
-        return ApiResponse::ok(null, 'Role deleted successfully', [], StatusCode::OK);
+        return ApiResponse::ok(null, 'Role deleted successfully', [], 200);
     }
     
     /**
@@ -148,7 +148,7 @@ class RoleController extends Controller
     {
         $permissions = Permission::all();
         
-        return ApiResponse::ok(['permissions' => $permissions], 'Permissions retrieved successfully', [], StatusCode::OK);
+        return ApiResponse::ok(['permissions' => $permissions], 'Permissions retrieved successfully', [], 200);
     }
     
     /**
@@ -163,7 +163,7 @@ class RoleController extends Controller
         $role = Role::find($id);
         
         if (!$role) {
-            return ApiResponse::notFound('Role not found', null, StatusCode::STATUS_GET_USER_NOT_FOUND);
+            return ApiResponse::notFound('Role not found', null, 404);
         }
         
         $validator = Validator::make($request->all(), [
@@ -172,7 +172,7 @@ class RoleController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return ApiResponse::validationError('Validation failed', $validator->errors()->toArray(), StatusCode::STATUS_VALIDATION_ERROR_422);
+            return ApiResponse::validationError('Validation failed', $validator->errors()->toArray(), 422);
         }
 
         $validated = $validator->validated();
@@ -180,6 +180,6 @@ class RoleController extends Controller
         $permissions = Permission::whereIn('id', $validated['permissions'])->get();
         $role->syncPermissions($permissions);
         
-        return ApiResponse::ok($role->load('permissions'), 'Permissions assigned successfully', [], StatusCode::OK);
+        return ApiResponse::ok($role->load('permissions'), 'Permissions assigned successfully', [], 200);
     }
 }

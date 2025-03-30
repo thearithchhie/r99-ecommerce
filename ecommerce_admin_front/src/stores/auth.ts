@@ -1,17 +1,18 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import apiClient, { refreshCsrfToken } from '@/utils/axios'
 import router from '@/router'
-import axios from '@/lib/axios'
 
 export interface User {
-  name: string;
-  email: string;
-  role: string;
+  id: number
+  name: string
+  email: string
+  role: string
 }
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
-  const isAuthenticated = ref(false)
+  const isAuthenticated = computed(() => !!user.value)
   const isLoading = ref(false)
   const error = ref<string | null>(null)
 
@@ -37,82 +38,66 @@ export const useAuthStore = defineStore('auth', () => {
   // Initialize auth state
   const initAuth = async () => {
     try {
-      const token = getCookie('token')
-      if (!token) {
-        throw new Error('No authentication token')
+      isLoading.value = true
+      error.value = null
+      
+      // First get a CSRF token if we don't have one
+      await refreshCsrfToken()
+      
+      // Check if user is already logged in
+      const response = await apiClient.get('/user')
+      
+      if (response.data && response.status === 200) {
+        user.value = response.data
+        return true
       }
       
-      const response = await axios.get('/user-profile', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      
-      user.value = response.data
-      isAuthenticated.value = true
-    } catch (error) {
-      console.log('Not authenticated or error fetching user data')
-      user.value = null
-      isAuthenticated.value = false
-      
-      // Check if we're on a protected route and redirect to login if needed
-      const currentRoute = router.currentRoute.value
-      if (currentRoute.meta.requiresAuth || 
-          currentRoute.path.startsWith('/dashboard') || 
-          currentRoute.path === '/') {
-        router.push('/auth/login')
+      return false
+    } catch (err: any) {
+      console.error('Init auth error:', err)
+      // If we get a 401, it means we're not authenticated
+      if (err.response && (err.response.status === 401 || err.response.status === 419)) {
+        return false
       }
+      
+      error.value = err.message || 'Failed to initialize authentication'
+      return false
+    } finally {
+      isLoading.value = false
     }
   }
 
   // Login function
   const login = async (email: string, password: string) => {
-    isLoading.value = true
-    error.value = null
-    
     try {
-      // Call the API login endpoint
-      const response = await axios.post('/auth/login', {
+      isLoading.value = true
+      error.value = null
+      
+      // First ensure we have a CSRF token
+      await refreshCsrfToken()
+      
+      // Attempt login
+      const response = await apiClient.post('/login', {
         email,
         password
       })
       
-      console.log('Login response:', response.data)
+      // If we get here, login was successful
+      user.value = response.data.user
       
-      // Handle API response format from Laravel backend
-      const responseData = response.data
+      // Redirect to dashboard after successful login
+      router.push({ name: 'dashboard' })
       
-      if (responseData.success) {
-        // Extract token from response
-        const token = responseData.data?.token
-        
-        if (token) {
-          // Save token to cookie
-          setCookie('token', token)
-          
-          // Set authenticated state
-          isAuthenticated.value = true
-          
-          // Try to fetch user details with the new token
-          // try {
-          //   await fetchUserProfile()
-          // } catch (profileError) {
-          //   console.error('Error fetching user profile:', profileError)
-          //   // Continue with login even if profile fetch fails
-          // }
-          
-          console.log('Login successful')
-          router.push('/dashboard')
-          return responseData
-        } else {
-          throw new Error('No token received from server')
-        }
-      } else {
-        throw new Error(responseData.message || 'Unknown error occurred')
-      }
+      return true
     } catch (err: any) {
       console.error('Login error:', err)
-      error.value = err.response?.data?.message || err.message || 'Failed to log in'
+      
+      if (err.response && err.response.data && err.response.data.message) {
+        error.value = err.response.data.message
+      } else {
+        error.value = err.message || 'Failed to login'
+      }
+      
       throw err
     } finally {
       isLoading.value = false
@@ -127,14 +112,13 @@ export const useAuthStore = defineStore('auth', () => {
         throw new Error('No authentication token found')
       }
       
-      const response = await axios.get('/user-profile', {
+      const response = await apiClient.get('/user-profile', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       })
       
       user.value = response.data
-      isAuthenticated.value = true
       return response.data
     } catch (error) {
       console.error('Error fetching user profile:', error)
@@ -144,30 +128,32 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Logout function
   const logout = async () => {
-    isLoading.value = true
     try {
-      // Get token from cookie
-      const token = getCookie('token')
+      isLoading.value = true
+      error.value = null
       
-      // Try to call the backend logout endpoint with token
-      try {
-        await axios.post('/auth/logout', {}, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        })
-      } catch (e) {
-        console.error('Backend logout failed, but proceeding with client logout', e)
-      }
+      // Call logout endpoint
+      await apiClient.post('/logout')
       
-      // Always clear local state regardless of API success
-      clearAuthData()
-      router.push('/auth/login')
-    } catch (error) {
-      console.error('Logout processing error:', error)
-      // Still clear auth data and redirect
-      clearAuthData()
-      router.push('/auth/login')
+      // Clear user data
+      user.value = null
+      
+      // Redirect to login
+      router.push({ name: 'login' })
+      
+      return true
+    } catch (err: any) {
+      console.error('Logout error:', err)
+      
+      // Even if there's an error, we should clear the user data
+      user.value = null
+      
+      error.value = err.message || 'Failed to logout'
+      
+      // Redirect to login anyway
+      router.push({ name: 'login' })
+      
+      return false
     } finally {
       isLoading.value = false
     }
@@ -176,7 +162,6 @@ export const useAuthStore = defineStore('auth', () => {
   // Clear auth data
   const clearAuthData = () => {
     user.value = null
-    isAuthenticated.value = false
     
     // Clear auth cookies
     deleteCookie('token')

@@ -94,10 +94,6 @@ const fetchUsers = async (page = 1, perPage = 10, search = '') => {
     // Extract data from response and handle accordingly
     const responseData = response.data;
     
-    // Log full response in development for debugging
-    if (import.meta.env.DEV) {
-      console.log('Full API Response:', JSON.stringify(responseData, null, 2));
-    }
     
     // Handle different API response structures
     if (responseData) {
